@@ -2,10 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import type SignatureCanvasType from 'react-signature-canvas';
-
-const SignatureCanvas = dynamic(() => import('react-signature-canvas'), { ssr: false }) as any;
 
 type LineItem = {
 name: string;
@@ -80,7 +77,20 @@ const [signatureName, setSignatureName] = useState('');
 const [declineReason, setDeclineReason] = useState('');
 const [declineNotes, setDeclineNotes] = useState('');
 const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-const sigRef = useRef<InstanceType<typeof SignatureCanvas>>(null);
+
+// Load react-signature-canvas on the client so refs attach directly
+const [SigCanvas, setSigCanvas] = useState<any>(null);
+useEffect(() => {
+  let mounted = true;
+  import('react-signature-canvas').then((mod) => {
+    if (mounted) setSigCanvas(() => mod.default);
+  });
+  return () => {
+    mounted = false;
+  };
+}, []);
+
+const sigRef = useRef<SignatureCanvasType | null>(null);
 
 useEffect(() => {
   if (!token) return;
@@ -129,7 +139,6 @@ const submit = async (payload: any) => {
       setSubmitting(false);
       return;
     }
-    // Reload to get fresh enriched state from get-estimate
     const refreshed = await fetch('/api/get-estimate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -156,7 +165,8 @@ const submit = async (payload: any) => {
 };
 
 const handleAccept = () => {
-  if (!sigRef.current || sigRef.current.isEmpty()) {
+  const pad = sigRef.current;
+  if (!pad || pad.isEmpty()) {
     alert('Please sign to accept.');
     return;
   }
@@ -164,10 +174,13 @@ const handleAccept = () => {
     alert('Please type your full name.');
     return;
   }
-  const signature_base64 = sigRef.current
-    .getTrimmedCanvas()
-    .toDataURL('image/png')
-    .split(',')[1];
+  // getCanvas() works across all versions of react-signature-canvas;
+  // getTrimmedCanvas() was removed in newer versions.
+  const canvas =
+    typeof (pad as any).getTrimmedCanvas === 'function'
+      ? (pad as any).getTrimmedCanvas()
+      : pad.getCanvas();
+  const signature_base64 = canvas.toDataURL('image/png').split(',')[1];
   submit({
     action: 'accept',
     signature_base64,
@@ -354,8 +367,7 @@ return (
       {totals.tax > 0 && (
         <div className="totals-row">
           <span>
-            Tax{' '}
-            {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
+            Tax {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
           </span>
           <span>{fmt(totals.tax)}</span>
         </div>
@@ -393,11 +405,17 @@ return (
       <div className="card">
         <div className="card-title">Sign to Accept</div>
         <div className="signature-wrap">
-          <SignatureCanvas
-            ref={sigRef}
-            canvasProps={{ className: 'signature-pad' }}
-            penColor="#000"
-          />
+          {SigCanvas ? (
+            <SigCanvas
+              ref={sigRef}
+              canvasProps={{ className: 'signature-pad' }}
+              penColor="#000"
+            />
+          ) : (
+            <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
+              Loading signature pad…
+            </div>
+          )}
         </div>
         <div className="signature-hint">Sign above with your finger or stylus</div>
         <button
@@ -413,7 +431,11 @@ return (
           value={signatureName}
           onChange={(e) => setSignatureName(e.target.value)}
         />
-        <button className="btn btn-primary" onClick={handleAccept} disabled={submitting}>
+        <button
+          className="btn btn-primary"
+          onClick={handleAccept}
+          disabled={submitting || !SigCanvas}
+        >
           {submitting
             ? 'Submitting…'
             : estimate.deposit_required
