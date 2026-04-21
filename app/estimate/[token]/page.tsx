@@ -53,10 +53,12 @@ tax_rate?: number | null;
 type EstimateResponse = {
 estimate: EstimateLink;
 job: Job;
-line_items: LineItem[];
+line_items?: LineItem[] | null;
 logo_url?: string | null;
 expired?: boolean;
 };
+
+const DEFAULT_LOGO_URL = 'https://shield-payment-page.vercel.app/shield-logo.png';
 
 const DECLINE_REASONS = [
 'Price too high',
@@ -78,7 +80,6 @@ const [declineReason, setDeclineReason] = useState('');
 const [declineNotes, setDeclineNotes] = useState('');
 const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
-// Load react-signature-canvas on the client so refs attach directly
 const [SigCanvas, setSigCanvas] = useState<any>(null);
 useEffect(() => {
   let mounted = true;
@@ -110,9 +111,14 @@ useEffect(() => {
 
 const fmt = (n: number) => `$${(n ?? 0).toFixed(2)}`;
 
+const lineItems: LineItem[] = useMemo(
+  () => (Array.isArray(data?.line_items) ? data!.line_items! : []),
+  [data]
+);
+
 const totals = useMemo(() => {
   if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0 };
-  const equipment = data.line_items.reduce(
+  const equipment = lineItems.reduce(
     (sum, li) => sum + (li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0)),
     0
   );
@@ -123,7 +129,7 @@ const totals = useMemo(() => {
   const taxRate = data.job.tax_rate ?? 0;
   const tax = taxable * taxRate;
   return { equipment, labor, tax, total: taxable + tax };
-}, [data]);
+}, [data, lineItems]);
 
 const submit = async (payload: any) => {
   setSubmitting(true);
@@ -174,8 +180,6 @@ const handleAccept = () => {
     alert('Please type your full name.');
     return;
   }
-  // getCanvas() works across all versions of react-signature-canvas;
-  // getTrimmedCanvas() was removed in newer versions.
   const canvas =
     typeof (pad as any).getTrimmedCanvas === 'function'
       ? (pad as any).getTrimmedCanvas()
@@ -217,7 +221,8 @@ if (error || !data)
     </div>
   );
 
-const { estimate, job, line_items, logo_url } = data;
+const { estimate, job, logo_url } = data;
+const resolvedLogo = logo_url || DEFAULT_LOGO_URL;
 const terminal = [
   'Accepted',
   'Declined',
@@ -231,11 +236,9 @@ const statusClass = `status-pill status-${estimate.status
 
 return (
   <div className="container">
-    {logo_url && (
-      <div className="logo-wrap">
-        <img src={logo_url} alt="Shield Low Voltage" />
-      </div>
-    )}
+    <div className="logo-wrap">
+      <img src={resolvedLogo} alt="Shield Low Voltage" />
+    </div>
 
     <div className="header">
       <h1>Your Estimate</h1>
@@ -273,10 +276,14 @@ return (
       )}
     </div>
 
-    {line_items.length > 0 && (
-      <div className="card">
-        <div className="card-title">Equipment</div>
-        {line_items.map((item, i) => {
+    <div className="card">
+      <div className="card-title">Equipment</div>
+      {lineItems.length === 0 ? (
+        <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+          No equipment listed on this estimate.
+        </div>
+      ) : (
+        lineItems.map((item, i) => {
           const lineTotal =
             item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
           const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
@@ -338,9 +345,9 @@ return (
               <div className="equipment-price">{fmt(lineTotal)}</div>
             </div>
           );
-        })}
-      </div>
-    )}
+        })
+      )}
+    </div>
 
     {job.estimate_notes && (
       <div className="card">
