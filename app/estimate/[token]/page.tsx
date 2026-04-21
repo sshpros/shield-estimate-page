@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-const SignatureCanvas = dynamic(() => import('react-signature-canvas'), { ssr: false });
+import type SignatureCanvasType from 'react-signature-canvas';
+
+const SignatureCanvas = dynamic(() => import('react-signature-canvas'), { ssr: false }) as any;
 
 type LineItem = {
 name: string;
