@@ -78,7 +78,7 @@ const [signatureName, setSignatureName] = useState('');
 const [declineReason, setDeclineReason] = useState('');
 const [declineNotes, setDeclineNotes] = useState('');
 const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-const sigRef = useRef<any>(null);
+const sigRef = useRef<InstanceType<typeof SignatureCanvas>>(null);
 
 useEffect(() => {
   if (!token) return;
