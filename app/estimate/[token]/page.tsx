@@ -58,8 +58,7 @@ logo_url?: string | null;
 expired?: boolean;
 };
 
-const DEFAULT_LOGO_URL =
-'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo.jpg';
+const DEFAULT_LOGO_URL = 'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo.jpg';
 const PAYMENT_PAGE_URL =
 process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL || 'https://shield-payment-page.vercel.app';
 
