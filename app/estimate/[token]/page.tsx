@@ -59,6 +59,8 @@ expired?: boolean;
 };
 
 const DEFAULT_LOGO_URL = 'https://shield-payment-page.vercel.app/shield-logo.png';
+const PAYMENT_PAGE_URL =
+process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL || 'https://shield-payment-page.vercel.app';
 
 const DECLINE_REASONS = [
 'Price too high',
@@ -145,6 +147,7 @@ const submit = async (payload: any) => {
       setSubmitting(false);
       return;
     }
+
     const refreshed = await fetch('/api/get-estimate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -153,12 +156,15 @@ const submit = async (payload: any) => {
     if (!refreshed.error) setData(refreshed);
 
     const estimate = (refreshed?.estimate ?? result?.estimate) as EstimateLink | undefined;
+    const depositInvoiceId =
+      estimate?.deposit_invoice_id ?? result?.deposit_invoice?.id ?? null;
+
     if (
       payload.action === 'accept' &&
       estimate?.deposit_required &&
-      estimate?.deposit_invoice_id
+      depositInvoiceId
     ) {
-      const payUrl = `${process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL}/api/payment?invoice_id=${estimate.deposit_invoice_id}&return_token=${token}`;
+      const payUrl = `${PAYMENT_PAGE_URL}/api/payment?invoice_id=${depositInvoiceId}&return_token=${token}`;
       window.location.href = payUrl;
       return;
     }
