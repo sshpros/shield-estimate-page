@@ -58,7 +58,8 @@ logo_url?: string | null;
 expired?: boolean;
 };
 
-const DEFAULT_LOGO_URL = 'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo.jpg';
+const DEFAULT_LOGO_URL =
+'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo.jpg';
 const PAYMENT_PAGE_URL =
 process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL || 'https://shield-payment-page.vercel.app';
 
@@ -69,6 +70,15 @@ const DECLINE_REASONS = [
 'Bad timing',
 'Other',
 ];
+
+function resolveLogoUrl(raw?: string | null): string {
+const val = (raw ?? '').trim();
+if (!val) return DEFAULT_LOGO_URL;
+if (/^https?:\/\//i.test(val)) return val;
+// If backend returned just a storage path like "logo.jpg" or "public-assets/logo.jpg"
+const path = val.replace(/^\/+/, '').replace(/^public-assets\//, '');
+return `https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/${path}`;
+}
 
 export default function EstimatePage() {
 const { token } = useParams<{ token: string }>();
@@ -81,6 +91,8 @@ const [signatureName, setSignatureName] = useState('');
 const [declineReason, setDeclineReason] = useState('');
 const [declineNotes, setDeclineNotes] = useState('');
 const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+const [logoSrc, setLogoSrc] = useState<string>(DEFAULT_LOGO_URL);
+const [logoFailed, setLogoFailed] = useState(false);
 
 const [SigCanvas, setSigCanvas] = useState<any>(null);
 useEffect(() => {
@@ -105,7 +117,12 @@ useEffect(() => {
     .then((r) => r.json())
     .then((res) => {
       if (res.error) setError(res.error);
-      else setData(res);
+      else {
+        setData(res);
+        const resolved = resolveLogoUrl(res?.logo_url);
+        setLogoSrc(resolved);
+        setLogoFailed(false);
+      }
     })
     .catch(() => setError('Failed to load estimate.'))
     .finally(() => setLoading(false));
@@ -227,8 +244,7 @@ if (error || !data)
     </div>
   );
 
-const { estimate, job, logo_url } = data;
-const resolvedLogo = logo_url || DEFAULT_LOGO_URL;
+const { estimate, job } = data;
 const terminal = [
   'Accepted',
   'Declined',
@@ -242,8 +258,47 @@ const statusClass = `status-pill status-${estimate.status
 
 return (
   <div className="container">
-    <div className="logo-wrap">
-      <img src={resolvedLogo} alt="Shield Low Voltage" />
+    <div
+      className="logo-wrap"
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '20px 0',
+      }}
+    >
+      {!logoFailed ? (
+        <img
+          src={logoSrc}
+          alt="Shield Low Voltage"
+          style={{
+            maxWidth: 220,
+            maxHeight: 120,
+            width: 'auto',
+            height: 'auto',
+            objectFit: 'contain',
+            display: 'block',
+          }}
+          onError={() => {
+            if (logoSrc !== DEFAULT_LOGO_URL) {
+              setLogoSrc(DEFAULT_LOGO_URL);
+            } else {
+              setLogoFailed(true);
+            }
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            color: '#fff',
+          }}
+        >
+          Shield Low Voltage
+        </div>
+      )}
     </div>
 
     <div className="header">
@@ -316,6 +371,7 @@ return (
                     {item.warranty_months
                       ? ` · ${item.warranty_months}mo warranty`
                       : ''}
+                  ''}
                   </div>
                 )}
                 {item.short_description && (
