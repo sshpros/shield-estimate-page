@@ -371,7 +371,6 @@ return (
                     {item.warranty_months
                       ? ` · ${item.warranty_months}mo warranty`
                       : ''}
-                  ''}
                   </div>
                 )}
                 {item.short_description && (
