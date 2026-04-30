@@ -18,6 +18,22 @@ features?: string[] | null;
 warranty_months?: number | null;
 };
 
+type Tier = {
+index: 0 | 1 | 2;
+label: string;
+is_recommended: boolean;
+is_accepted: boolean;
+line_items: LineItem[];
+equipment_total: number;
+labor_total: number;
+subtotal: number;
+tax_rate: number;
+tax_amount: number;
+total: number;
+deposit_percent: number;
+deposit_amount: number;
+};
+
 type EstimateLink = {
 id: string;
 token: string;
@@ -54,6 +70,11 @@ type EstimateResponse = {
 estimate: EstimateLink;
 job: Job;
 line_items?: LineItem[] | null;
+is_tiered?: boolean;
+tier_labels?: [string, string, string];
+recommended_tier_index?: 0 | 1 | 2;
+accepted_tier_index?: number;
+tiers?: Tier[] | null;
 logo_url?: string | null;
 expired?: boolean;
 };
@@ -75,7 +96,6 @@ function resolveLogoUrl(raw?: string | null): string {
 const val = (raw ?? '').trim();
 if (!val) return DEFAULT_LOGO_URL;
 if (/^https?:\/\//i.test(val)) return val;
-// If backend returned just a storage path like "logo.jpg" or "public-assets/logo.jpg"
 const path = val.replace(/^\/+/, '').replace(/^public-assets\//, '');
 return `https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/${path}`;
 }
@@ -93,6 +113,7 @@ const [declineNotes, setDeclineNotes] = useState('');
 const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 const [logoSrc, setLogoSrc] = useState<string>(DEFAULT_LOGO_URL);
 const [logoFailed, setLogoFailed] = useState(false);
+const [selectedTierIndex, setSelectedTierIndex] = useState<0 | 1 | 2>(1);
 
 const [SigCanvas, setSigCanvas] = useState<any>(null);
 useEffect(() => {
@@ -122,6 +143,12 @@ useEffect(() => {
         const resolved = resolveLogoUrl(res?.logo_url);
         setLogoSrc(resolved);
         setLogoFailed(false);
+        if (res?.is_tiered) {
+          const accepted = Number(res?.accepted_tier_index ?? -1);
+          const recommended = Number(res?.recommended_tier_index ?? 1);
+          const initial = (accepted >= 0 ? accepted : recommended) as 0 | 1 | 2;
+          setSelectedTierIndex(([0, 1, 2].includes(initial) ? initial : 1) as 0 | 1 | 2);
+        }
       }
     })
     .catch(() => setError('Failed to load estimate.'))
@@ -130,14 +157,23 @@ useEffect(() => {
 
 const fmt = (n: number) => `$${(n ?? 0).toFixed(2)}`;
 
-const lineItems: LineItem[] = useMemo(
+const isTiered = Boolean(data?.is_tiered && Array.isArray(data?.tiers) && data!.tiers!.length === 3);
+const tiers: Tier[] = useMemo(
+  () => (isTiered ? (data!.tiers as Tier[]) : []),
+  [data, isTiered]
+);
+const selectedTier: Tier | null = isTiered
+  ? tiers.find((t) => t.index === selectedTierIndex) ?? tiers[1] ?? null
+  : null;
+
+const flatLineItems: LineItem[] = useMemo(
   () => (Array.isArray(data?.line_items) ? data!.line_items! : []),
   [data]
 );
 
-const totals = useMemo(() => {
-  if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0 };
-  const equipment = lineItems.reduce(
+const flatTotals = useMemo(() => {
+  if (!data || isTiered) return { equipment: 0, labor: 0, tax: 0, total: 0 };
+  const equipment = flatLineItems.reduce(
     (sum, li) => sum + (li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0)),
     0
   );
@@ -148,7 +184,7 @@ const totals = useMemo(() => {
   const taxRate = data.job.tax_rate ?? 0;
   const tax = taxable * taxRate;
   return { equipment, labor, tax, total: taxable + tax };
-}, [data, lineItems]);
+}, [data, flatLineItems, isTiered]);
 
 const submit = async (payload: any) => {
   setSubmitting(true);
@@ -208,11 +244,13 @@ const handleAccept = () => {
       ? (pad as any).getTrimmedCanvas()
       : pad.getCanvas();
   const signature_base64 = canvas.toDataURL('image/png').split(',')[1];
-  submit({
+  const payload: any = {
     action: 'accept',
     signature_base64,
     customer_signature_name: signatureName.trim(),
-  });
+  };
+  if (isTiered) payload.accepted_tier_index = selectedTierIndex;
+  submit(payload);
 };
 
 const handleDecline = () => {
@@ -255,6 +293,65 @@ const terminal = [
 const statusClass = `status-pill status-${estimate.status
   .toLowerCase()
   .replace(/\s+/g, '-')}`;
+
+const renderLineItem = (item: LineItem, i: number) => {
+  const lineTotal = item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
+  const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
+  return (
+    <div className="equipment-item" key={i}>
+      {item.primary_image_url ? (
+        <img
+          src={item.primary_image_url}
+          alt={item.name}
+          className="equipment-img"
+          onClick={() => setLightboxImage(item.primary_image_url!)}
+          style={{ cursor: 'zoom-in' }}
+        />
+      ) : (
+        <div className="equipment-img-placeholder">📦</div>
+      )}
+      <div className="equipment-details">
+        <div className="equipment-name">{item.name}</div>
+        {(item.manufacturer || item.model_number) && (
+          <div className="equipment-meta">
+            {[item.manufacturer, item.model_number].filter(Boolean).join(' · ')}
+            {item.warranty_months ? ` · ${item.warranty_months}mo warranty` : ''}
+          </div>
+        )}
+        {item.short_description && (
+          <div className="equipment-desc">{item.short_description}</div>
+        )}
+        {item.features && item.features.length > 0 && (
+          <ul className="equipment-features">
+            {item.features.slice(0, 5).map((f, idx) => (
+              <li key={idx}>
+                <span className="feature-check">✓</span>
+                {f}
+              </li>
+            ))}
+          </ul>
+        )}
+        {gallery.length > 0 && (
+          <div className="gallery-strip">
+            {gallery.slice(0, 6).map((url, idx) => (
+              <img
+                key={idx}
+                src={url}
+                alt={`${item.name} ${idx + 1}`}
+                className="gallery-thumb"
+                onClick={() => setLightboxImage(url)}
+              />
+            ))}
+          </div>
+        )}
+        <div className="equipment-qty" style={{ marginTop: 6 }}>
+          Qty {item.quantity} × {fmt(item.unit_price)}
+        </div>
+      </div>
+      <div className="equipment-price">{fmt(lineTotal)}</div>
+    </div>
+  );
+};
 
 return (
   <div className="container">
@@ -337,126 +434,192 @@ return (
       )}
     </div>
 
-    <div className="card">
-      <div className="card-title">Equipment</div>
-      {lineItems.length === 0 ? (
-        <div style={{ color: '#8b93a7', padding: '8px 0' }}>
-          No equipment listed on this estimate.
+    {isTiered ? (
+      <>
+        <div
+          style={{
+            textAlign: 'center',
+            color: '#cfd6e6',
+            fontSize: 14,
+            margin: '4px 0 12px',
+            padding: '0 16px',
+          }}
+        >
+          Choose the option that's right for you. Tap a tier to select it.
         </div>
-      ) : (
-        lineItems.map((item, i) => {
-          const lineTotal =
-            item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
-          const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
+
+        {tiers.map((tier) => {
+          const isSelected = tier.index === selectedTierIndex;
           return (
-            <div className="equipment-item" key={i}>
-              {item.primary_image_url ? (
-                <img
-                  src={item.primary_image_url}
-                  alt={item.name}
-                  className="equipment-img"
-                  onClick={() => setLightboxImage(item.primary_image_url!)}
-                  style={{ cursor: 'zoom-in' }}
-                />
-              ) : (
-                <div className="equipment-img-placeholder">📦</div>
+            <div
+              key={tier.index}
+              className="card"
+              onClick={() => !terminal && setSelectedTierIndex(tier.index)}
+              style={{
+                cursor: terminal ? 'default' : 'pointer',
+                border: isSelected
+                  ? '2px solid #4a7fff'
+                  : '1px solid rgba(255,255,255,0.08)',
+                position: 'relative',
+                transition: 'border-color 0.15s ease',
+              }}
+            >
+              {tier.is_recommended && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: -10,
+                    right: 16,
+                    background: '#4a7fff',
+                    color: '#fff',
+                    padding: '4px 12px',
+                    borderRadius: 12,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  ★ Recommended
+                </div>
               )}
-              <div className="equipment-details">
-                <div className="equipment-name">{item.name}</div>
-                {(item.manufacturer || item.model_number) && (
-                  <div className="equipment-meta">
-                    {[item.manufacturer, item.model_number]
-                      .filter(Boolean)
-                      .join(' · ')}
-                    {item.warranty_months
-                      ? ` · ${item.warranty_months}mo warranty`
-                      : ''}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: '50%',
+                      border: isSelected ? '6px solid #4a7fff' : '2px solid #555',
+                      background: isSelected ? '#fff' : 'transparent',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>
+                    {tier.label}
                   </div>
-                )}
-                {item.short_description && (
-                  <div className="equipment-desc">{item.short_description}</div>
-                )}
-                {item.features && item.features.length > 0 && (
-                  <ul className="equipment-features">
-                    {item.features.slice(0, 5).map((f, idx) => (
-                      <li key={idx}>
-                        <span className="feature-check">✓</span>
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {gallery.length > 0 && (
-                  <div className="gallery-strip">
-                    {gallery.slice(0, 6).map((url, idx) => (
-                      <img
-                        key={idx}
-                        src={url}
-                        alt={`${item.name} ${idx + 1}`}
-                        className="gallery-thumb"
-                        onClick={() => setLightboxImage(url)}
-                      />
-                    ))}
-                  </div>
-                )}
-                <div className="equipment-qty" style={{ marginTop: 6 }}>
-                  Qty {item.quantity} × {fmt(item.unit_price)}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>
+                  {fmt(tier.total)}
                 </div>
               </div>
-              <div className="equipment-price">{fmt(lineTotal)}</div>
+
+              {tier.line_items.length === 0 ? (
+                <div style={{ color: '#8b93a7', padding: '8px 0', fontSize: 14 }}>
+                  No equipment in this tier.
+                </div>
+              ) : (
+                tier.line_items.map((item, i) => renderLineItem(item, i))
+              )}
+
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="totals-row">
+                  <span>Equipment</span>
+                  <span>{fmt(tier.equipment_total)}</span>
+                </div>
+                {tier.labor_total > 0 && (
+                  <div className="totals-row">
+                    <span>Labor</span>
+                    <span>{fmt(tier.labor_total)}</span>
+                  </div>
+                )}
+                {tier.tax_amount > 0 && (
+                  <div className="totals-row">
+                    <span>Tax ({tier.tax_rate.toFixed(2)}%)</span>
+                    <span>{fmt(tier.tax_amount)}</span>
+                  </div>
+                )}
+                <div className="totals-row grand">
+                  <span>Total</span>
+                  <span>{fmt(tier.total)}</span>
+                </div>
+                {estimate.deposit_required && tier.deposit_amount > 0 && (
+                  <div className="deposit-badge">
+                    Deposit of {fmt(tier.deposit_amount)} ({tier.deposit_percent.toFixed(0)}%) required to start work
+                  </div>
+                )}
+              </div>
             </div>
           );
-        })
-      )}
-    </div>
+        })}
+      </>
+    ) : (
+      <>
+        <div className="card">
+          <div className="card-title">Equipment</div>
+          {flatLineItems.length === 0 ? (
+            <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+              No equipment listed on this estimate.
+            </div>
+          ) : (
+            flatLineItems.map((item, i) => renderLineItem(item, i))
+          )}
+        </div>
 
-    {job.estimate_notes && (
+        {job.estimate_notes && (
+          <div className="card">
+            <div className="card-title">Notes</div>
+            <div className="notes-text">{job.estimate_notes}</div>
+          </div>
+        )}
+
+        <div className="card">
+          <div className="card-title">Pricing</div>
+          <div className="totals-row">
+            <span>Equipment</span>
+            <span>{fmt(flatTotals.equipment)}</span>
+          </div>
+          {flatTotals.labor > 0 && (
+            <div className="totals-row">
+              <span>
+                Labor
+                {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
+              </span>
+              <span>{fmt(flatTotals.labor)}</span>
+            </div>
+          )}
+          {flatTotals.tax > 0 && (
+            <div className="totals-row">
+              <span>
+                Tax {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
+              </span>
+              <span>{fmt(flatTotals.tax)}</span>
+            </div>
+          )}
+          <div className="totals-row grand">
+            <span>Total</span>
+            <span>{fmt(flatTotals.total)}</span>
+          </div>
+          {estimate.deposit_required && estimate.deposit_amount != null && (
+            <div className="deposit-badge">
+              {estimate.deposit_paid
+                ? `✓ Deposit of ${fmt(estimate.deposit_amount)} received`
+                : `Deposit of ${fmt(estimate.deposit_amount)} required to start work`}
+            </div>
+          )}
+        </div>
+      </>
+    )}
+
+    {isTiered && job.estimate_notes && (
       <div className="card">
         <div className="card-title">Notes</div>
         <div className="notes-text">{job.estimate_notes}</div>
       </div>
     )}
 
-    <div className="card">
-      <div className="card-title">Pricing</div>
-      <div className="totals-row">
-        <span>Equipment</span>
-        <span>{fmt(totals.equipment)}</span>
-      </div>
-      {totals.labor > 0 && (
-        <div className="totals-row">
-          <span>
-            Labor
-            {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
-          </span>
-          <span>{fmt(totals.labor)}</span>
-        </div>
-      )}
-      {totals.tax > 0 && (
-        <div className="totals-row">
-          <span>
-            Tax {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
-          </span>
-          <span>{fmt(totals.tax)}</span>
-        </div>
-      )}
-      <div className="totals-row grand">
-        <span>Total</span>
-        <span>{fmt(totals.total)}</span>
-      </div>
-      {estimate.deposit_required && estimate.deposit_amount != null && (
-        <div className="deposit-badge">
-          {estimate.deposit_paid
-            ? `✓ Deposit of ${fmt(estimate.deposit_amount)} received`
-            : `Deposit of ${fmt(estimate.deposit_amount)} required to start work`}
-        </div>
-      )}
-    </div>
-
     {!terminal && mode === 'view' && (
       <>
         <button className="btn btn-primary" onClick={() => setMode('accept')}>
-          Accept Estimate
+          {isTiered && selectedTier
+            ? `Accept ${selectedTier.label} — ${fmt(selectedTier.total)}`
+            : 'Accept Estimate'}
         </button>
         <div className="btn-row">
           <button className="btn btn-secondary" onClick={() => setMode('request')}>
@@ -471,7 +634,11 @@ return (
 
     {mode === 'accept' && (
       <div className="card">
-        <div className="card-title">Sign to Accept</div>
+        <div className="card-title">
+          {isTiered && selectedTier
+            ? `Sign to Accept — ${selectedTier.label} (${fmt(selectedTier.total)})`
+            : 'Sign to Accept'}
+        </div>
         <div className="signature-wrap">
           {SigCanvas ? (
             <SigCanvas
