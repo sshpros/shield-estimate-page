@@ -33,6 +33,12 @@ deposit_amount?: number | null;
 deposit_paid?: boolean;
 deposit_invoice_id?: string | null;
 customer_email?: string | null;
+subtotal?: number | null;
+tax_rate?: number | null;
+tax_amount?: number | null;
+labor_total?: number | null;
+equipment_total?: number | null;
+total_amount?: number | null;
 };
 
 type Job = {
@@ -77,6 +83,16 @@ if (!val) return DEFAULT_LOGO_URL;
 if (/^https?:\/\//i.test(val)) return val;
 const path = val.replace(/^\/+/, '').replace(/^public-assets\//, '');
 return `https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/${path}`;
+}
+
+// Normalize a tax-rate value to a percentage number (e.g. 7.42 means 7.42%).
+// Handles both stored forms:
+//   - percentage form: 7.42  -> 7.42
+//   - decimal-fraction form: 0.0742 -> 7.42
+function normalizeTaxRatePct(raw: number | null | undefined): number {
+const n = Number(raw ?? 0);
+if (!isFinite(n) || n <= 0) return 0;
+return n > 1 ? n : n * 100;
 }
 
 export default function EstimatePage() {
@@ -134,8 +150,15 @@ const lineItems: LineItem[] = useMemo(
   [data]
 );
 
+// Display-only normalized tax rate as a percentage number (e.g. 7.42).
+const displayTaxRatePct = useMemo(
+  () => normalizeTaxRatePct(data?.job?.tax_rate ?? data?.estimate?.tax_rate ?? 0),
+  [data]
+);
+
 const totals = useMemo(() => {
   if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0 };
+
   const equipment = lineItems.reduce(
     (sum, li) => sum + (li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0)),
     0
@@ -144,9 +167,27 @@ const totals = useMemo(() => {
     data.job.estimated_labor_cost ??
     (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
   const taxable = equipment + labor;
-  const taxRate = data.job.tax_rate ?? 0;
-  const tax = taxable * taxRate;
-  return { equipment, labor, tax, total: taxable + tax };
+
+  // Prefer the server-computed tax amount from the estimate_links row when
+  // available — that is the same value the iOS app shows. This is the
+  // single source of truth and avoids any rate-unit mismatch on this page.
+  const serverTax = data.estimate?.tax_amount;
+  let tax: number;
+  if (serverTax != null && Number(serverTax) >= 0) {
+    tax = Number(serverTax);
+  } else {
+    const taxRatePct = normalizeTaxRatePct(data.job.tax_rate);
+    tax = taxable * (taxRatePct / 100);
+  }
+
+  // Prefer server-computed total when present.
+  const serverTotal = data.estimate?.total_amount;
+  const total =
+    serverTotal != null && Number(serverTotal) > 0
+      ? Number(serverTotal)
+      : taxable + tax;
+
+  return { equipment, labor, tax, total };
 }, [data, lineItems]);
 
 const submit = async (payload: any) => {
@@ -256,459 +297,358 @@ const statusClass = `status-pill status-${estimate.status
   .replace(/\s+/g, '-')}`;
 
 return (
-  <>
-    {/* Desktop polish: 2-column layout, sticky sidebar, equipment grid, refined typography */}
-    <style jsx global>{`
-      .desktop-shell {
-        max-width: 640px;
-        margin: 0 auto;
-        padding: 0 16px;
-      }
-
-      @media (min-width: 900px) {
-        .desktop-shell {
-          max-width: 1180px;
-          padding: 0 32px;
-        }
-        .desktop-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 380px;
-          gap: 32px;
-          align-items: start;
-        }
-        .desktop-sidebar {
-          position: sticky;
-          top: 24px;
-        }
-        .desktop-header h1 {
-          font-size: 36px;
-          letter-spacing: -0.02em;
-        }
-        .equipment-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 16px;
-        }
-        .equipment-grid .equipment-item {
-          margin: 0;
-        }
-        .info-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px 24px;
-        }
-        .info-grid .info-row {
-          border: none;
-          padding: 6px 0;
-        }
-      }
-
-      @media (min-width: 1200px) {
-        .desktop-shell {
-          max-width: 1280px;
-        }
-        .desktop-grid {
-          grid-template-columns: minmax(0, 1fr) 420px;
-          gap: 40px;
-        }
-        .equipment-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-      }
-
-      .desktop-header {
-        text-align: center;
-        padding: 28px 0 20px;
-      }
-      @media (min-width: 900px) {
-        .desktop-header {
-          text-align: left;
-          padding: 16px 0 24px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-          margin-bottom: 28px;
-        }
-      }
-    `}</style>
-
-    <div className="container desktop-shell">
-      <div
-        className="logo-wrap"
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '20px 0',
-        }}
-      >
-        {!logoFailed ? (
-          <img
-            src={logoSrc}
-            alt="Shield Low Voltage"
-            style={{
-              maxWidth: 220,
-              maxHeight: 120,
-              width: 'auto',
-              height: 'auto',
-              objectFit: 'contain',
-              display: 'block',
-            }}
-            onError={() => {
-              if (logoSrc !== DEFAULT_LOGO_URL) {
-                setLogoSrc(DEFAULT_LOGO_URL);
-              } else {
-                setLogoFailed(true);
-              }
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: 0.5,
-              color: '#fff',
-            }}
-          >
-            Shield Low Voltage
-          </div>
-        )}
-      </div>
-
-      <div className="header desktop-header">
-        <h1>Your Estimate</h1>
-        <p>
-          {estimate.estimate_number ? `#${estimate.estimate_number} · ` : ''}
-          <span className={statusClass}>{estimate.status}</span>
-        </p>
-      </div>
-
-      <div className="desktop-grid">
-        {/* MAIN COLUMN */}
-        <div>
-          <div className="card">
-            <div className="card-title">Customer</div>
-            <div className="info-grid">
-              <div className="info-row">
-                <span className="info-label">Name</span>
-                <span className="info-value">{job.customer_name}</span>
-              </div>
-              {job.address && (
-                <div className="info-row">
-                  <span className="info-label">Job Site</span>
-                  <span className="info-value">{job.address}</span>
-                </div>
-              )}
-              {job.job_type && (
-                <div className="info-row">
-                  <span className="info-label">Service</span>
-                  <span className="info-value">{job.job_type}</span>
-                </div>
-              )}
-              {estimate.expires_at && (
-                <div className="info-row">
-                  <span className="info-label">Expires</span>
-                  <span className="info-value">
-                    {new Date(estimate.expires_at).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Equipment</div>
-            {lineItems.length === 0 ? (
-              <div style={{ color: '#8b93a7', padding: '8px 0' }}>
-                No equipment listed on this estimate.
-              </div>
-            ) : (
-              <div className="equipment-grid">
-                {lineItems.map((item, i) => {
-                  const lineTotal =
-                    item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
-                  const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
-                  return (
-                    <div className="equipment-item" key={i}>
-                      {item.primary_image_url ? (
-                        <img
-                          src={item.primary_image_url}
-                          alt={item.name}
-                          className="equipment-img"
-                          onClick={() => setLightboxImage(item.primary_image_url!)}
-                          style={{ cursor: 'zoom-in' }}
-                        />
-                      ) : (
-                        <div className="equipment-img-placeholder">📦</div>
-                      )}
-                      <div className="equipment-details">
-                        <div className="equipment-name">{item.name}</div>
-                        {(item.manufacturer || item.model_number) && (
-                          <div className="equipment-meta">
-                            {[item.manufacturer, item.model_number]
-                              .filter(Boolean)
-                              .join(' · ')}
-                            {item.warranty_months
-                              ? ` · ${item.warranty_months}mo warranty`
-                              : ''}
-                          </div>
-                        )}
-                        {item.short_description && (
-                          <div className="equipment-desc">{item.short_description}</div>
-                        )}
-                        {item.features && item.features.length > 0 && (
-                          <ul className="equipment-features">
-                            {item.features.slice(0, 5).map((f, idx) => (
-                              <li key={idx}>
-                                <span className="feature-check">✓</span>
-                                {f}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        {gallery.length > 0 && (
-                          <div className="gallery-strip">
-                            {gallery.slice(0, 6).map((url, idx) => (
-                              <img
-                                key={idx}
-                                src={url}
-                                alt={`${item.name} ${idx + 1}`}
-                                className="gallery-thumb"
-                                onClick={() => setLightboxImage(url)}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <div className="equipment-qty" style={{ marginTop: 6 }}>
-                          Qty {item.quantity} × {fmt(item.unit_price)}
-                        </div>
-                      </div>
-                      <div className="equipment-price">{fmt(lineTotal)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {job.estimate_notes && (
-            <div className="card">
-              <div className="card-title">Notes</div>
-              <div className="notes-text">{job.estimate_notes}</div>
-            </div>
-          )}
-        </div>
-
-        {/* STICKY SIDEBAR (pricing + actions) */}
-        <div className="desktop-sidebar">
-          <div className="card">
-            <div className="card-title">Pricing</div>
-            <div className="totals-row">
-              <span>Equipment</span>
-              <span>{fmt(totals.equipment)}</span>
-            </div>
-            {totals.labor > 0 && (
-              <div className="totals-row">
-                <span>
-                  Labor
-                  {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
-                </span>
-                <span>{fmt(totals.labor)}</span>
-              </div>
-            )}
-            {totals.tax > 0 && (
-              <div className="totals-row">
-                <span>
-                  Tax {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
-                </span>
-                <span>{fmt(totals.tax)}</span>
-              </div>
-            )}
-            <div className="totals-row grand">
-              <span>Total</span>
-              <span>{fmt(totals.total)}</span>
-            </div>
-            {estimate.deposit_required && estimate.deposit_amount != null && (
-              <div className="deposit-badge">
-                {estimate.deposit_paid
-                  ? `✓ Deposit of ${fmt(estimate.deposit_amount)} received`
-                  : `Deposit of ${fmt(estimate.deposit_amount)} required to start work`}
-              </div>
-            )}
-          </div>
-
-          {!terminal && mode === 'view' && (
-            <>
-              <button className="btn btn-primary" onClick={() => setMode('accept')}>
-                Accept Estimate
-              </button>
-              <div className="btn-row">
-                <button className="btn btn-secondary" onClick={() => setMode('request')}>
-                  Request Changes
-                </button>
-                <button className="btn btn-danger" onClick={() => setMode('decline')}>
-                  Decline
-                </button>
-              </div>
-            </>
-          )}
-
-          {mode === 'accept' && (
-            <div className="card">
-              <div className="card-title">Sign to Accept</div>
-              <div className="signature-wrap">
-                {SigCanvas ? (
-                  <SigCanvas
-                    ref={sigRef}
-                    canvasProps={{ className: 'signature-pad' }}
-                    penColor="#000"
-                  />
-                ) : (
-                  <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
-                    Loading signature pad…
-                  </div>
-                )}
-              </div>
-              <div className="signature-hint">Sign above with your finger or stylus</div>
-              <button
-                className="btn btn-secondary"
-                style={{ marginBottom: 12 }}
-                onClick={() => sigRef.current?.clear()}
-              >
-                Clear Signature
-              </button>
-              <input
-                className="input"
-                placeholder="Type your full name"
-                value={signatureName}
-                onChange={(e) => setSignatureName(e.target.value)}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={handleAccept}
-                disabled={submitting || !SigCanvas}
-              >
-                {submitting
-                  ? 'Submitting…'
-                  : estimate.deposit_required
-                  ? 'Accept & Continue to Deposit'
-                  : 'Accept Estimate'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => setMode('view')}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {mode === 'decline' && (
-            <div className="card">
-              <div className="card-title">Decline Estimate</div>
-              <div style={{ marginBottom: 10 }}>
-                {DECLINE_REASONS.map((r) => (
-                  <button
-                    key={r}
-                    className={`reason-pill ${declineReason === r ? 'active' : ''}`}
-                    onClick={() => setDeclineReason(r)}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-              <textarea
-                className="textarea"
-                placeholder="Additional notes (optional)"
-                value={declineNotes}
-                onChange={(e) => setDeclineNotes(e.target.value)}
-              />
-              <button className="btn btn-danger" onClick={handleDecline} disabled={submitting}>
-                {submitting ? 'Submitting…' : 'Submit Decline'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => setMode('view')}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {mode === 'request' && (
-            <div className="card">
-              <div className="card-title">Request Changes</div>
-              <textarea
-                className="textarea"
-                placeholder="What would you like changed?"
-                value={declineNotes}
-                onChange={(e) => setDeclineNotes(e.target.value)}
-              />
-              <button className="btn btn-primary" onClick={handleRequest} disabled={submitting}>
-                {submitting ? 'Submitting…' : 'Send Request'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => setMode('view')}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {terminal && (
-            <div className="card" style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 40, marginBottom: 8 }}>
-                {estimate.status === 'Accepted' || estimate.status === 'Deposit Paid'
-                  ? '✓'
-                  : estimate.status === 'Expired'
-                  ? '⏱'
-                  : '✕'}
-              </div>
-              <h2 style={{ marginBottom: 6 }}>{estimate.status}</h2>
-              <p style={{ color: '#8b93a7' }}>
-                {estimate.status === 'Accepted' &&
-                  'Thank you! We will be in touch shortly.'}
-                {estimate.status === 'Deposit Paid' &&
-                  'Your deposit has been received. We will schedule your job soon.'}
-                {estimate.status === 'Declined' && 'We have recorded your response.'}
-                {estimate.status === 'Changes Requested' &&
-                  'Your request has been sent. We will reach out shortly.'}
-                {estimate.status === 'Expired' &&
-                  'This estimate has expired. Please contact us for a new one.'}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {lightboxImage && (
-        <div
-          className="lightbox"
-          onClick={() => setLightboxImage(null)}
+  <div className="container">
+    <div
+      className="logo-wrap"
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '20px 0',
+      }}
+    >
+      {!logoFailed ? (
+        <img
+          src={logoSrc}
+          alt="Shield Low Voltage"
           style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.9)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            cursor: 'zoom-out',
+            maxWidth: 220,
+            maxHeight: 120,
+            width: 'auto',
+            height: 'auto',
+            objectFit: 'contain',
+            display: 'block',
+          }}
+          onError={() => {
+            if (logoSrc !== DEFAULT_LOGO_URL) {
+              setLogoSrc(DEFAULT_LOGO_URL);
+            } else {
+              setLogoFailed(true);
+            }
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            color: '#fff',
           }}
         >
-          <img
-            src={lightboxImage}
-            alt=""
-            style={{ maxWidth: '92%', maxHeight: '92%', borderRadius: 8 }}
-          />
+          Shield Low Voltage
         </div>
       )}
-
-      <div className="footer-note">Shield Low Voltage · Powered by SSH Pros</div>
     </div>
-  </>
+
+    <div className="header">
+      <h1>Your Estimate</h1>
+      <p>
+        {estimate.estimate_number ? `#${estimate.estimate_number} · ` : ''}
+        <span className={statusClass}>{estimate.status}</span>
+      </p>
+    </div>
+
+    <div className="card">
+      <div className="card-title">Customer</div>
+      <div className="info-row">
+        <span className="info-label">Name</span>
+        <span className="info-value">{job.customer_name}</span>
+      </div>
+      {job.address && (
+        <div className="info-row">
+          <span className="info-label">Job Site</span>
+          <span className="info-value">{job.address}</span>
+        </div>
+      )}
+      {job.job_type && (
+        <div className="info-row">
+          <span className="info-label">Service</span>
+          <span className="info-value">{job.job_type}</span>
+        </div>
+      )}
+      {estimate.expires_at && (
+        <div className="info-row">
+          <span className="info-label">Expires</span>
+          <span className="info-value">
+            {new Date(estimate.expires_at).toLocaleDateString()}
+          </span>
+        </div>
+      )}
+    </div>
+
+    <div className="card">
+      <div className="card-title">Equipment</div>
+      {lineItems.length === 0 ? (
+        <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+          No equipment listed on this estimate.
+        </div>
+      ) : (
+        lineItems.map((item, i) => {
+          const lineTotal =
+            item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
+          const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
+          return (
+            <div className="equipment-item" key={i}>
+              {item.primary_image_url ? (
+                <img
+                  src={item.primary_image_url}
+                  alt={item.name}
+                  className="equipment-img"
+                  onClick={() => setLightboxImage(item.primary_image_url!)}
+                  style={{ cursor: 'zoom-in' }}
+                />
+              ) : (
+                <div className="equipment-img-placeholder">📦</div>
+              )}
+              <div className="equipment-details">
+                <div className="equipment-name">{item.name}</div>
+                {(item.manufacturer || item.model_number) && (
+                  <div className="equipment-meta">
+                    {[item.manufacturer, item.model_number]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    {item.warranty_months
+                      ? ` · ${item.warranty_months}mo warranty`
+                      : ''}
+                  </div>
+                )}
+                {item.short_description && (
+                  <div className="equipment-desc">{item.short_description}</div>
+                )}
+                {item.features && item.features.length > 0 && (
+                  <ul className="equipment-features">
+                    {item.features.slice(0, 5).map((f, idx) => (
+                      <li key={idx}>
+                        <span className="feature-check">✓</span>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {gallery.length > 0 && (
+                  <div className="gallery-strip">
+                    {gallery.slice(0, 6).map((url, idx) => (
+                      <img
+                        key={idx}
+                        src={url}
+                        alt={`${item.name} ${idx + 1}`}
+                        className="gallery-thumb"
+                        onClick={() => setLightboxImage(url)}
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="equipment-qty" style={{ marginTop: 6 }}>
+                  Qty {item.quantity} × {fmt(item.unit_price)}
+                </div>
+              </div>
+              <div className="equipment-price">{fmt(lineTotal)}</div>
+            </div>
+          );
+        })
+      )}
+    </div>
+
+    {job.estimate_notes && (
+      <div className="card">
+        <div className="card-title">Notes</div>
+        <div className="notes-text">{job.estimate_notes}</div>
+      </div>
+    )}
+
+    <div className="card">
+      <div className="card-title">Pricing</div>
+      <div className="totals-row">
+        <span>Equipment</span>
+        <span>{fmt(totals.equipment)}</span>
+      </div>
+      {totals.labor > 0 && (
+        <div className="totals-row">
+          <span>
+            Labor
+            {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
+          </span>
+          <span>{fmt(totals.labor)}</span>
+        </div>
+      )}
+      {totals.tax > 0 && (
+        <div className="totals-row">
+          <span>
+            Tax {displayTaxRatePct > 0 ? `(${displayTaxRatePct.toFixed(2)}%)` : ''}
+          </span>
+          <span>{fmt(totals.tax)}</span>
+        </div>
+      )}
+      <div className="totals-row grand">
+        <span>Total</span>
+        <span>{fmt(totals.total)}</span>
+      </div>
+      {estimate.deposit_required && estimate.deposit_amount != null && (
+        <div className="deposit-badge">
+          {estimate.deposit_paid
+            ? `✓ Deposit of ${fmt(estimate.deposit_amount)} received`
+            : `Deposit of ${fmt(estimate.deposit_amount)} required to start work`}
+        </div>
+      )}
+    </div>
+
+    {!terminal && mode === 'view' && (
+      <>
+        <button className="btn btn-primary" onClick={() => setMode('accept')}>
+          Accept Estimate
+        </button>
+        <div className="btn-row">
+          <button className="btn btn-secondary" onClick={() => setMode('request')}>
+            Request Changes
+          </button>
+          <button className="btn btn-danger" onClick={() => setMode('decline')}>
+            Decline
+          </button>
+        </div>
+      </>
+    )}
+
+    {mode === 'accept' && (
+      <div className="card">
+        <div className="card-title">Sign to Accept</div>
+        <div className="signature-wrap">
+          {SigCanvas ? (
+            <SigCanvas
+              ref={sigRef}
+              canvasProps={{ className: 'signature-pad' }}
+              penColor="#000"
+            />
+          ) : (
+            <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
+              Loading signature pad…
+            </div>
+          )}
+        </div>
+        <div className="signature-hint">Sign above with your finger or stylus</div>
+        <button
+          className="btn btn-secondary"
+          style={{ marginBottom: 12 }}
+          onClick={() => sigRef.current?.clear()}
+        >
+          Clear Signature
+        </button>
+        <input
+          className="input"
+          placeholder="Type your full name"
+          value={signatureName}
+          onChange={(e) => setSignatureName(e.target.value)}
+        />
+        <button
+          className="btn btn-primary"
+          onClick={handleAccept}
+          disabled={submitting || !SigCanvas}
+        >
+          {submitting
+            ? 'Submitting…'
+            : estimate.deposit_required
+            ? 'Accept & Continue to Deposit'
+            : 'Accept Estimate'}
+        </button>
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 8 }}
+          onClick={() => setMode('view')}
+        >
+          Cancel
+        </button>
+      </div>
+    )}
+
+    {mode === 'decline' && (
+      <div className="card">
+        <div className="card-title">Decline Estimate</div>
+        <div style={{ marginBottom: 10 }}>
+          {DECLINE_REASONS.map((r) => (
+            <button
+              key={r}
+              className={`reason-pill ${declineReason === r ? 'active' : ''}`}
+              onClick={() => setDeclineReason(r)}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <textarea
+          className="textarea"
+          placeholder="Additional notes (optional)"
+          value={declineNotes}
+          onChange={(e) => setDeclineNotes(e.target.value)}
+        />
+        <button
+          className="btn btn-danger"
+          onClick={handleDecline}
+          disabled={submitting}
+        >
+          {submitting ? 'Submitting…' : 'Submit Decline'}
+        </button>
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 8 }}
+          onClick={() => setMode('view')}
+        >
+          Cancel
+        </button>
+      </div>
+    )}
+
+    {mode === 'request' && (
+      <div className="card">
+        <div className="card-title">Request Changes</div>
+        <textarea
+          className="textarea"
+          placeholder="What would you like to change?"
+          value={declineNotes}
+          onChange={(e) => setDeclineNotes(e.target.value)}
+        />
+        <button
+          className="btn btn-primary"
+          onClick={handleRequest}
+          disabled={submitting}
+        >
+          {submitting ? 'Submitting…' : 'Submit Request'}
+        </button>
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 8 }}
+          onClick={() => setMode('view')}
+        >
+          Cancel
+        </button>
+      </div>
+    )}
+
+    {lightboxImage && (
+      <div
+        onClick={() => setLightboxImage(null)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.92)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          cursor: 'zoom-out',
+          padding: 20,
+        }}
+      >
+        <img
+          src={lightboxImage}
+          alt="Equipment"
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      </div>
+    )}
+
+    <div className="footer-note">
+      Shield Low Voltage · Questions? Reply to this message or call us.
+    </div>
+  </div>
 );
 }
