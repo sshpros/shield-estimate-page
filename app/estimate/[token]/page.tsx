@@ -18,22 +18,6 @@ features?: string[] | null;
 warranty_months?: number | null;
 };
 
-type Tier = {
-index: 0 | 1 | 2;
-label: string;
-is_recommended: boolean;
-is_accepted: boolean;
-line_items: LineItem[];
-equipment_total: number;
-labor_total: number;
-subtotal: number;
-tax_rate: number;
-tax_amount: number;
-total: number;
-deposit_percent: number;
-deposit_amount: number;
-};
-
 type EstimateLink = {
 id: string;
 token: string;
@@ -70,11 +54,6 @@ type EstimateResponse = {
 estimate: EstimateLink;
 job: Job;
 line_items?: LineItem[] | null;
-is_tiered?: boolean;
-tier_labels?: [string, string, string];
-recommended_tier_index?: 0 | 1 | 2;
-accepted_tier_index?: number;
-tiers?: Tier[] | null;
 logo_url?: string | null;
 expired?: boolean;
 };
@@ -113,7 +92,6 @@ const [declineNotes, setDeclineNotes] = useState('');
 const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 const [logoSrc, setLogoSrc] = useState<string>(DEFAULT_LOGO_URL);
 const [logoFailed, setLogoFailed] = useState(false);
-const [selectedTierIndex, setSelectedTierIndex] = useState<0 | 1 | 2>(1);
 
 const [SigCanvas, setSigCanvas] = useState<any>(null);
 useEffect(() => {
@@ -143,12 +121,6 @@ useEffect(() => {
         const resolved = resolveLogoUrl(res?.logo_url);
         setLogoSrc(resolved);
         setLogoFailed(false);
-        if (res?.is_tiered) {
-          const accepted = Number(res?.accepted_tier_index ?? -1);
-          const recommended = Number(res?.recommended_tier_index ?? 1);
-          const initial = (accepted >= 0 ? accepted : recommended) as 0 | 1 | 2;
-          setSelectedTierIndex(([0, 1, 2].includes(initial) ? initial : 1) as 0 | 1 | 2);
-        }
       }
     })
     .catch(() => setError('Failed to load estimate.'))
@@ -157,23 +129,14 @@ useEffect(() => {
 
 const fmt = (n: number) => `$${(n ?? 0).toFixed(2)}`;
 
-const isTiered = Boolean(data?.is_tiered && Array.isArray(data?.tiers) && data!.tiers!.length === 3);
-const tiers: Tier[] = useMemo(
-  () => (isTiered ? (data!.tiers as Tier[]) : []),
-  [data, isTiered]
-);
-const selectedTier: Tier | null = isTiered
-  ? tiers.find((t) => t.index === selectedTierIndex) ?? tiers[1] ?? null
-  : null;
-
-const flatLineItems: LineItem[] = useMemo(
+const lineItems: LineItem[] = useMemo(
   () => (Array.isArray(data?.line_items) ? data!.line_items! : []),
   [data]
 );
 
-const flatTotals = useMemo(() => {
-  if (!data || isTiered) return { equipment: 0, labor: 0, tax: 0, total: 0 };
-  const equipment = flatLineItems.reduce(
+const totals = useMemo(() => {
+  if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0 };
+  const equipment = lineItems.reduce(
     (sum, li) => sum + (li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0)),
     0
   );
@@ -184,7 +147,7 @@ const flatTotals = useMemo(() => {
   const taxRate = data.job.tax_rate ?? 0;
   const tax = taxable * taxRate;
   return { equipment, labor, tax, total: taxable + tax };
-}, [data, flatLineItems, isTiered]);
+}, [data, lineItems]);
 
 const submit = async (payload: any) => {
   setSubmitting(true);
@@ -244,13 +207,11 @@ const handleAccept = () => {
       ? (pad as any).getTrimmedCanvas()
       : pad.getCanvas();
   const signature_base64 = canvas.toDataURL('image/png').split(',')[1];
-  const payload: any = {
+  submit({
     action: 'accept',
     signature_base64,
     customer_signature_name: signatureName.trim(),
-  };
-  if (isTiered) payload.accepted_tier_index = selectedTierIndex;
-  submit(payload);
+  });
 };
 
 const handleDecline = () => {
@@ -294,502 +255,460 @@ const statusClass = `status-pill status-${estimate.status
   .toLowerCase()
   .replace(/\s+/g, '-')}`;
 
-const renderLineItem = (item: LineItem, i: number) => {
-  const lineTotal = item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
-  const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
-  return (
-    <div className="equipment-item" key={i}>
-      {item.primary_image_url ? (
-        <img
-          src={item.primary_image_url}
-          alt={item.name}
-          className="equipment-img"
-          onClick={() => setLightboxImage(item.primary_image_url!)}
-          style={{ cursor: 'zoom-in' }}
-        />
-      ) : (
-        <div className="equipment-img-placeholder">📦</div>
-      )}
-      <div className="equipment-details">
-        <div className="equipment-name">{item.name}</div>
-        {(item.manufacturer || item.model_number) && (
-          <div className="equipment-meta">
-            {[item.manufacturer, item.model_number].filter(Boolean).join(' · ')}
-            {item.warranty_months ? ` · ${item.warranty_months}mo warranty` : ''}
-          </div>
-        )}
-        {item.short_description && (
-          <div className="equipment-desc">{item.short_description}</div>
-        )}
-        {item.features && item.features.length > 0 && (
-          <ul className="equipment-features">
-            {item.features.slice(0, 5).map((f, idx) => (
-              <li key={idx}>
-                <span className="feature-check">✓</span>
-                {f}
-              </li>
-            ))}
-          </ul>
-        )}
-        {gallery.length > 0 && (
-          <div className="gallery-strip">
-            {gallery.slice(0, 6).map((url, idx) => (
-              <img
-                key={idx}
-                src={url}
-                alt={`${item.name} ${idx + 1}`}
-                className="gallery-thumb"
-                onClick={() => setLightboxImage(url)}
-              />
-            ))}
-          </div>
-        )}
-        <div className="equipment-qty" style={{ marginTop: 6 }}>
-          Qty {item.quantity} × {fmt(item.unit_price)}
-        </div>
-      </div>
-      <div className="equipment-price">{fmt(lineTotal)}</div>
-    </div>
-  );
-};
-
 return (
-  <div className="container">
-    <div
-      className="logo-wrap"
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: '20px 0',
-      }}
-    >
-      {!logoFailed ? (
-        <img
-          src={logoSrc}
-          alt="Shield Low Voltage"
-          style={{
-            maxWidth: 220,
-            maxHeight: 120,
-            width: 'auto',
-            height: 'auto',
-            objectFit: 'contain',
-            display: 'block',
-          }}
-          onError={() => {
-            if (logoSrc !== DEFAULT_LOGO_URL) {
-              setLogoSrc(DEFAULT_LOGO_URL);
-            } else {
-              setLogoFailed(true);
-            }
-          }}
-        />
-      ) : (
-        <div
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-            color: '#fff',
-          }}
-        >
-          Shield Low Voltage
-        </div>
-      )}
-    </div>
+  <>
+    {/* Desktop polish: 2-column layout, sticky sidebar, equipment grid, refined typography */}
+    <style jsx global>{`
+      .desktop-shell {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
 
-    <div className="header">
-      <h1>Your Estimate</h1>
-      <p>
-        {estimate.estimate_number ? `#${estimate.estimate_number} · ` : ''}
-        <span className={statusClass}>{estimate.status}</span>
-      </p>
-    </div>
+      @media (min-width: 900px) {
+        .desktop-shell {
+          max-width: 1180px;
+          padding: 0 32px;
+        }
+        .desktop-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 380px;
+          gap: 32px;
+          align-items: start;
+        }
+        .desktop-sidebar {
+          position: sticky;
+          top: 24px;
+        }
+        .desktop-header h1 {
+          font-size: 36px;
+          letter-spacing: -0.02em;
+        }
+        .equipment-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+        }
+        .equipment-grid .equipment-item {
+          margin: 0;
+        }
+        .info-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px 24px;
+        }
+        .info-grid .info-row {
+          border: none;
+          padding: 6px 0;
+        }
+      }
 
-    <div className="card">
-      <div className="card-title">Customer</div>
-      <div className="info-row">
-        <span className="info-label">Name</span>
-        <span className="info-value">{job.customer_name}</span>
-      </div>
-      {job.address && (
-        <div className="info-row">
-          <span className="info-label">Job Site</span>
-          <span className="info-value">{job.address}</span>
-        </div>
-      )}
-      {job.job_type && (
-        <div className="info-row">
-          <span className="info-label">Service</span>
-          <span className="info-value">{job.job_type}</span>
-        </div>
-      )}
-      {estimate.expires_at && (
-        <div className="info-row">
-          <span className="info-label">Expires</span>
-          <span className="info-value">
-            {new Date(estimate.expires_at).toLocaleDateString()}
-          </span>
-        </div>
-      )}
-    </div>
+      @media (min-width: 1200px) {
+        .desktop-shell {
+          max-width: 1280px;
+        }
+        .desktop-grid {
+          grid-template-columns: minmax(0, 1fr) 420px;
+          gap: 40px;
+        }
+        .equipment-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
 
-    {isTiered ? (
-      <>
-        <div
-          style={{
-            textAlign: 'center',
-            color: '#cfd6e6',
-            fontSize: 14,
-            margin: '4px 0 12px',
-            padding: '0 16px',
-          }}
-        >
-          Choose the option that's right for you. Tap a tier to select it.
-        </div>
+      .desktop-header {
+        text-align: center;
+        padding: 28px 0 20px;
+      }
+      @media (min-width: 900px) {
+        .desktop-header {
+          text-align: left;
+          padding: 16px 0 24px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          margin-bottom: 28px;
+        }
+      }
+    `}</style>
 
-        {tiers.map((tier) => {
-          const isSelected = tier.index === selectedTierIndex;
-          return (
-            <div
-              key={tier.index}
-              className="card"
-              onClick={() => !terminal && setSelectedTierIndex(tier.index)}
-              style={{
-                cursor: terminal ? 'default' : 'pointer',
-                border: isSelected
-                  ? '2px solid #4a7fff'
-                  : '1px solid rgba(255,255,255,0.08)',
-                position: 'relative',
-                transition: 'border-color 0.15s ease',
-              }}
-            >
-              {tier.is_recommended && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: -10,
-                    right: 16,
-                    background: '#4a7fff',
-                    color: '#fff',
-                    padding: '4px 12px',
-                    borderRadius: 12,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  ★ Recommended
-                </div>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 12,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: '50%',
-                      border: isSelected ? '6px solid #4a7fff' : '2px solid #555',
-                      background: isSelected ? '#fff' : 'transparent',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>
-                    {tier.label}
-                  </div>
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>
-                  {fmt(tier.total)}
-                </div>
-              </div>
-
-              {tier.line_items.length === 0 ? (
-                <div style={{ color: '#8b93a7', padding: '8px 0', fontSize: 14 }}>
-                  No equipment in this tier.
-                </div>
-              ) : (
-                tier.line_items.map((item, i) => renderLineItem(item, i))
-              )}
-
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="totals-row">
-                  <span>Equipment</span>
-                  <span>{fmt(tier.equipment_total)}</span>
-                </div>
-                {tier.labor_total > 0 && (
-                  <div className="totals-row">
-                    <span>Labor</span>
-                    <span>{fmt(tier.labor_total)}</span>
-                  </div>
-                )}
-                {tier.tax_amount > 0 && (
-                  <div className="totals-row">
-                    <span>Tax ({tier.tax_rate.toFixed(2)}%)</span>
-                    <span>{fmt(tier.tax_amount)}</span>
-                  </div>
-                )}
-                <div className="totals-row grand">
-                  <span>Total</span>
-                  <span>{fmt(tier.total)}</span>
-                </div>
-                {estimate.deposit_required && tier.deposit_amount > 0 && (
-                  <div className="deposit-badge">
-                    Deposit of {fmt(tier.deposit_amount)} ({tier.deposit_percent.toFixed(0)}%) required to start work
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </>
-    ) : (
-      <>
-        <div className="card">
-          <div className="card-title">Equipment</div>
-          {flatLineItems.length === 0 ? (
-            <div style={{ color: '#8b93a7', padding: '8px 0' }}>
-              No equipment listed on this estimate.
-            </div>
-          ) : (
-            flatLineItems.map((item, i) => renderLineItem(item, i))
-          )}
-        </div>
-
-        {job.estimate_notes && (
-          <div className="card">
-            <div className="card-title">Notes</div>
-            <div className="notes-text">{job.estimate_notes}</div>
-          </div>
-        )}
-
-        <div className="card">
-          <div className="card-title">Pricing</div>
-          <div className="totals-row">
-            <span>Equipment</span>
-            <span>{fmt(flatTotals.equipment)}</span>
-          </div>
-          {flatTotals.labor > 0 && (
-            <div className="totals-row">
-              <span>
-                Labor
-                {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
-              </span>
-              <span>{fmt(flatTotals.labor)}</span>
-            </div>
-          )}
-          {flatTotals.tax > 0 && (
-            <div className="totals-row">
-              <span>
-                Tax {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
-              </span>
-              <span>{fmt(flatTotals.tax)}</span>
-            </div>
-          )}
-          <div className="totals-row grand">
-            <span>Total</span>
-            <span>{fmt(flatTotals.total)}</span>
-          </div>
-          {estimate.deposit_required && estimate.deposit_amount != null && (
-            <div className="deposit-badge">
-              {estimate.deposit_paid
-                ? `✓ Deposit of ${fmt(estimate.deposit_amount)} received`
-                : `Deposit of ${fmt(estimate.deposit_amount)} required to start work`}
-            </div>
-          )}
-        </div>
-      </>
-    )}
-
-    {isTiered && job.estimate_notes && (
-      <div className="card">
-        <div className="card-title">Notes</div>
-        <div className="notes-text">{job.estimate_notes}</div>
-      </div>
-    )}
-
-    {!terminal && mode === 'view' && (
-      <>
-        <button className="btn btn-primary" onClick={() => setMode('accept')}>
-          {isTiered && selectedTier
-            ? `Accept ${selectedTier.label} — ${fmt(selectedTier.total)}`
-            : 'Accept Estimate'}
-        </button>
-        <div className="btn-row">
-          <button className="btn btn-secondary" onClick={() => setMode('request')}>
-            Request Changes
-          </button>
-          <button className="btn btn-danger" onClick={() => setMode('decline')}>
-            Decline
-          </button>
-        </div>
-      </>
-    )}
-
-    {mode === 'accept' && (
-      <div className="card">
-        <div className="card-title">
-          {isTiered && selectedTier
-            ? `Sign to Accept — ${selectedTier.label} (${fmt(selectedTier.total)})`
-            : 'Sign to Accept'}
-        </div>
-        <div className="signature-wrap">
-          {SigCanvas ? (
-            <SigCanvas
-              ref={sigRef}
-              canvasProps={{ className: 'signature-pad' }}
-              penColor="#000"
-            />
-          ) : (
-            <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
-              Loading signature pad…
-            </div>
-          )}
-        </div>
-        <div className="signature-hint">Sign above with your finger or stylus</div>
-        <button
-          className="btn btn-secondary"
-          style={{ marginBottom: 12 }}
-          onClick={() => sigRef.current?.clear()}
-        >
-          Clear Signature
-        </button>
-        <input
-          className="input"
-          placeholder="Type your full name"
-          value={signatureName}
-          onChange={(e) => setSignatureName(e.target.value)}
-        />
-        <button
-          className="btn btn-primary"
-          onClick={handleAccept}
-          disabled={submitting || !SigCanvas}
-        >
-          {submitting
-            ? 'Submitting…'
-            : estimate.deposit_required
-            ? 'Accept & Continue to Deposit'
-            : 'Accept Estimate'}
-        </button>
-        <button
-          className="btn btn-secondary"
-          style={{ marginTop: 8 }}
-          onClick={() => setMode('view')}
-        >
-          Cancel
-        </button>
-      </div>
-    )}
-
-    {mode === 'decline' && (
-      <div className="card">
-        <div className="card-title">Decline Estimate</div>
-        <div style={{ marginBottom: 10 }}>
-          {DECLINE_REASONS.map((r) => (
-            <button
-              key={r}
-              className={`reason-pill ${declineReason === r ? 'active' : ''}`}
-              onClick={() => setDeclineReason(r)}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-        <textarea
-          className="textarea"
-          placeholder="Additional notes (optional)"
-          value={declineNotes}
-          onChange={(e) => setDeclineNotes(e.target.value)}
-        />
-        <button className="btn btn-danger" onClick={handleDecline} disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Submit Decline'}
-        </button>
-        <button
-          className="btn btn-secondary"
-          style={{ marginTop: 8 }}
-          onClick={() => setMode('view')}
-        >
-          Cancel
-        </button>
-      </div>
-    )}
-
-    {mode === 'request' && (
-      <div className="card">
-        <div className="card-title">Request Changes</div>
-        <textarea
-          className="textarea"
-          placeholder="What would you like changed?"
-          value={declineNotes}
-          onChange={(e) => setDeclineNotes(e.target.value)}
-        />
-        <button className="btn btn-primary" onClick={handleRequest} disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Send Request'}
-        </button>
-        <button
-          className="btn btn-secondary"
-          style={{ marginTop: 8 }}
-          onClick={() => setMode('view')}
-        >
-          Cancel
-        </button>
-      </div>
-    )}
-
-    {terminal && (
-      <div className="card" style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>
-          {estimate.status === 'Accepted' || estimate.status === 'Deposit Paid'
-            ? '✓'
-            : estimate.status === 'Expired'
-            ? '⏱'
-            : '✕'}
-        </div>
-        <h2 style={{ marginBottom: 6 }}>{estimate.status}</h2>
-        <p style={{ color: '#8b93a7' }}>
-          {estimate.status === 'Accepted' &&
-            'Thank you! We will be in touch shortly.'}
-          {estimate.status === 'Deposit Paid' &&
-            'Your deposit has been received. We will schedule your job soon.'}
-          {estimate.status === 'Declined' && 'We have recorded your response.'}
-          {estimate.status === 'Changes Requested' &&
-            'Your request has been sent. We will reach out shortly.'}
-          {estimate.status === 'Expired' &&
-            'This estimate has expired. Please contact us for a new one.'}
-        </p>
-      </div>
-    )}
-
-    {lightboxImage && (
+    <div className="container desktop-shell">
       <div
-        className="lightbox"
-        onClick={() => setLightboxImage(null)}
+        className="logo-wrap"
         style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.9)',
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
-          cursor: 'zoom-out',
+          alignItems: 'center',
+          padding: '20px 0',
         }}
       >
-        <img
-          src={lightboxImage}
-          alt=""
-          style={{ maxWidth: '92%', maxHeight: '92%', borderRadius: 8 }}
-        />
+        {!logoFailed ? (
+          <img
+            src={logoSrc}
+            alt="Shield Low Voltage"
+            style={{
+              maxWidth: 220,
+              maxHeight: 120,
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+            onError={() => {
+              if (logoSrc !== DEFAULT_LOGO_URL) {
+                setLogoSrc(DEFAULT_LOGO_URL);
+              } else {
+                setLogoFailed(true);
+              }
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: 0.5,
+              color: '#fff',
+            }}
+          >
+            Shield Low Voltage
+          </div>
+        )}
       </div>
-    )}
 
-    <div className="footer-note">Shield Low Voltage · Powered by Rork</div>
-  </div>
+      <div className="header desktop-header">
+        <h1>Your Estimate</h1>
+        <p>
+          {estimate.estimate_number ? `#${estimate.estimate_number} · ` : ''}
+          <span className={statusClass}>{estimate.status}</span>
+        </p>
+      </div>
+
+      <div className="desktop-grid">
+        {/* MAIN COLUMN */}
+        <div>
+          <div className="card">
+            <div className="card-title">Customer</div>
+            <div className="info-grid">
+              <div className="info-row">
+                <span className="info-label">Name</span>
+                <span className="info-value">{job.customer_name}</span>
+              </div>
+              {job.address && (
+                <div className="info-row">
+                  <span className="info-label">Job Site</span>
+                  <span className="info-value">{job.address}</span>
+                </div>
+              )}
+              {job.job_type && (
+                <div className="info-row">
+                  <span className="info-label">Service</span>
+                  <span className="info-value">{job.job_type}</span>
+                </div>
+              )}
+              {estimate.expires_at && (
+                <div className="info-row">
+                  <span className="info-label">Expires</span>
+                  <span className="info-value">
+                    {new Date(estimate.expires_at).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Equipment</div>
+            {lineItems.length === 0 ? (
+              <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+                No equipment listed on this estimate.
+              </div>
+            ) : (
+              <div className="equipment-grid">
+                {lineItems.map((item, i) => {
+                  const lineTotal =
+                    item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
+                  const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
+                  return (
+                    <div className="equipment-item" key={i}>
+                      {item.primary_image_url ? (
+                        <img
+                          src={item.primary_image_url}
+                          alt={item.name}
+                          className="equipment-img"
+                          onClick={() => setLightboxImage(item.primary_image_url!)}
+                          style={{ cursor: 'zoom-in' }}
+                        />
+                      ) : (
+                        <div className="equipment-img-placeholder">📦</div>
+                      )}
+                      <div className="equipment-details">
+                        <div className="equipment-name">{item.name}</div>
+                        {(item.manufacturer || item.model_number) && (
+                          <div className="equipment-meta">
+                            {[item.manufacturer, item.model_number]
+                              .filter(Boolean)
+                              .join(' · ')}
+                            {item.warranty_months
+                              ? ` · ${item.warranty_months}mo warranty`
+                              : ''}
+                          </div>
+                        )}
+                        {item.short_description && (
+                          <div className="equipment-desc">{item.short_description}</div>
+                        )}
+                        {item.features && item.features.length > 0 && (
+                          <ul className="equipment-features">
+                            {item.features.slice(0, 5).map((f, idx) => (
+                              <li key={idx}>
+                                <span className="feature-check">✓</span>
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {gallery.length > 0 && (
+                          <div className="gallery-strip">
+                            {gallery.slice(0, 6).map((url, idx) => (
+                              <img
+                                key={idx}
+                                src={url}
+                                alt={`${item.name} ${idx + 1}`}
+                                className="gallery-thumb"
+                                onClick={() => setLightboxImage(url)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        <div className="equipment-qty" style={{ marginTop: 6 }}>
+                          Qty {item.quantity} × {fmt(item.unit_price)}
+                        </div>
+                      </div>
+                      <div className="equipment-price">{fmt(lineTotal)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {job.estimate_notes && (
+            <div className="card">
+              <div className="card-title">Notes</div>
+              <div className="notes-text">{job.estimate_notes}</div>
+            </div>
+          )}
+        </div>
+
+        {/* STICKY SIDEBAR (pricing + actions) */}
+        <div className="desktop-sidebar">
+          <div className="card">
+            <div className="card-title">Pricing</div>
+            <div className="totals-row">
+              <span>Equipment</span>
+              <span>{fmt(totals.equipment)}</span>
+            </div>
+            {totals.labor > 0 && (
+              <div className="totals-row">
+                <span>
+                  Labor
+                  {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
+                </span>
+                <span>{fmt(totals.labor)}</span>
+              </div>
+            )}
+            {totals.tax > 0 && (
+              <div className="totals-row">
+                <span>
+                  Tax {job.tax_rate ? `(${(job.tax_rate * 100).toFixed(2)}%)` : ''}
+                </span>
+                <span>{fmt(totals.tax)}</span>
+              </div>
+            )}
+            <div className="totals-row grand">
+              <span>Total</span>
+              <span>{fmt(totals.total)}</span>
+            </div>
+            {estimate.deposit_required && estimate.deposit_amount != null && (
+              <div className="deposit-badge">
+                {estimate.deposit_paid
+                  ? `✓ Deposit of ${fmt(estimate.deposit_amount)} received`
+                  : `Deposit of ${fmt(estimate.deposit_amount)} required to start work`}
+              </div>
+            )}
+          </div>
+
+          {!terminal && mode === 'view' && (
+            <>
+              <button className="btn btn-primary" onClick={() => setMode('accept')}>
+                Accept Estimate
+              </button>
+              <div className="btn-row">
+                <button className="btn btn-secondary" onClick={() => setMode('request')}>
+                  Request Changes
+                </button>
+                <button className="btn btn-danger" onClick={() => setMode('decline')}>
+                  Decline
+                </button>
+              </div>
+            </>
+          )}
+
+          {mode === 'accept' && (
+            <div className="card">
+              <div className="card-title">Sign to Accept</div>
+              <div className="signature-wrap">
+                {SigCanvas ? (
+                  <SigCanvas
+                    ref={sigRef}
+                    canvasProps={{ className: 'signature-pad' }}
+                    penColor="#000"
+                  />
+                ) : (
+                  <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
+                    Loading signature pad…
+                  </div>
+                )}
+              </div>
+              <div className="signature-hint">Sign above with your finger or stylus</div>
+              <button
+                className="btn btn-secondary"
+                style={{ marginBottom: 12 }}
+                onClick={() => sigRef.current?.clear()}
+              >
+                Clear Signature
+              </button>
+              <input
+                className="input"
+                placeholder="Type your full name"
+                value={signatureName}
+                onChange={(e) => setSignatureName(e.target.value)}
+              />
+              <button
+                className="btn btn-primary"
+                onClick={handleAccept}
+                disabled={submitting || !SigCanvas}
+              >
+                {submitting
+                  ? 'Submitting…'
+                  : estimate.deposit_required
+                  ? 'Accept & Continue to Deposit'
+                  : 'Accept Estimate'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ marginTop: 8 }}
+                onClick={() => setMode('view')}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {mode === 'decline' && (
+            <div className="card">
+              <div className="card-title">Decline Estimate</div>
+              <div style={{ marginBottom: 10 }}>
+                {DECLINE_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    className={`reason-pill ${declineReason === r ? 'active' : ''}`}
+                    onClick={() => setDeclineReason(r)}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                className="textarea"
+                placeholder="Additional notes (optional)"
+                value={declineNotes}
+                onChange={(e) => setDeclineNotes(e.target.value)}
+              />
+              <button className="btn btn-danger" onClick={handleDecline} disabled={submitting}>
+                {submitting ? 'Submitting…' : 'Submit Decline'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ marginTop: 8 }}
+                onClick={() => setMode('view')}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {mode === 'request' && (
+            <div className="card">
+              <div className="card-title">Request Changes</div>
+              <textarea
+                className="textarea"
+                placeholder="What would you like changed?"
+                value={declineNotes}
+                onChange={(e) => setDeclineNotes(e.target.value)}
+              />
+              <button className="btn btn-primary" onClick={handleRequest} disabled={submitting}>
+                {submitting ? 'Submitting…' : 'Send Request'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ marginTop: 8 }}
+                onClick={() => setMode('view')}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {terminal && (
+            <div className="card" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>
+                {estimate.status === 'Accepted' || estimate.status === 'Deposit Paid'
+                  ? '✓'
+                  : estimate.status === 'Expired'
+                  ? '⏱'
+                  : '✕'}
+              </div>
+              <h2 style={{ marginBottom: 6 }}>{estimate.status}</h2>
+              <p style={{ color: '#8b93a7' }}>
+                {estimate.status === 'Accepted' &&
+                  'Thank you! We will be in touch shortly.'}
+                {estimate.status === 'Deposit Paid' &&
+                  'Your deposit has been received. We will schedule your job soon.'}
+                {estimate.status === 'Declined' && 'We have recorded your response.'}
+                {estimate.status === 'Changes Requested' &&
+                  'Your request has been sent. We will reach out shortly.'}
+                {estimate.status === 'Expired' &&
+                  'This estimate has expired. Please contact us for a new one.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lightboxImage && (
+        <div
+          className="lightbox"
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            cursor: 'zoom-out',
+          }}
+        >
+          <img
+            src={lightboxImage}
+            alt=""
+            style={{ maxWidth: '92%', maxHeight: '92%', borderRadius: 8 }}
+          />
+        </div>
+      )}
+
+      <div className="footer-note">Shield Low Voltage · Powered by SSH Pros</div>
+    </div>
+  </>
 );
 }
