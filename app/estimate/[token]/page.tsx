@@ -17,6 +17,7 @@ type LineItem = {
   short_description?: string | null;
   features?: string[] | null;
   warranty_months?: number | null;
+  warranty_description?: string | null;
 };
 
 type Tier = {
