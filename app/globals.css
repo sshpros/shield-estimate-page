@@ -68,3 +68,17 @@ input, textarea { font-family: inherit; }
 
 .notes-text { font-size: 14px; color: #c7cddb; line-height: 1.6; white-space: pre-wrap; }
 .footer-note { text-align: center; color: #4b5563; font-size: 12px; margin-top: 24px; padding: 0 16px; }
+
+.tier-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tier-btn { background: #1f2634; border: 1px solid #2d3646; border-radius: 12px; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: all .15s; position: relative; }
+.tier-btn:hover { border-color: #3b82f6; }
+.tier-btn-active { background: rgba(37,99,235,.15); border-color: #2563eb !important; }
+.tier-btn-recommended { border-color: rgba(234,179,8,.5); }
+.tier-star { font-size: 14px; line-height: 1; }
+.tier-label { font-size: 14px; font-weight: 600; color: #fff; text-align: center; }
+.tier-total { font-size: 13px; color: #8b93a7; font-variant-numeric: tabular-nums; }
+.tier-btn-active .tier-total { color: #60a5fa; }
+.tier-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #facc15; background: rgba(234,179,8,.1); border-radius: 999px; padding: 2px 8px; margin-top: 2px; }
+
+.gallery-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.gallery-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; cursor: zoom-in; }
