@@ -565,6 +565,46 @@ export default function EstimatePage() {
         </>
       )}
 
+      {terminal && (
+        <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>
+            {estimate.status === 'Accepted' || estimate.status === 'Deposit Paid'
+              ? '✓'
+              : estimate.status === 'Expired'
+              ? '⏱'
+              : '✕'}
+          </div>
+          <h2 style={{ marginBottom: 8 }}>{estimate.status}</h2>
+          <p style={{ color: '#8b93a7', marginBottom: 0 }}>
+            {estimate.status === 'Accepted' && estimate.deposit_required && !estimate.deposit_paid
+              ? 'Your estimate has been accepted. Please complete your deposit payment to get started.'
+              : estimate.status === 'Accepted'
+              ? 'Thank you! We will be in touch shortly.'
+              : estimate.status === 'Deposit Paid'
+              ? 'Your deposit has been received. We will be in touch to schedule your job.'
+              : estimate.status === 'Declined'
+              ? 'We have recorded your response.'
+              : estimate.status === 'Changes Requested'
+              ? 'Your request has been sent. We will reach out shortly.'
+              : estimate.status === 'Expired'
+              ? 'This estimate has expired. Please contact us for a new one.'
+              : ''}
+          </p>
+          {estimate.status === 'Accepted' &&
+            estimate.deposit_required &&
+            estimate.deposit_invoice_id &&
+            !estimate.deposit_paid && (
+              <a
+                href={`${PAYMENT_PAGE_URL}/api/payment?invoice_id=${estimate.deposit_invoice_id}&return_token=${token}`}
+                className="btn btn-primary"
+                style={{ display: 'block', marginTop: 20, textDecoration: 'none' }}
+              >
+                Pay Deposit — {fmt(depositAmount ?? 0)}
+              </a>
+            )}
+        </div>
+      )}
+
       {mode === 'accept' && (
         <div className="card">
           <div className="card-title">
