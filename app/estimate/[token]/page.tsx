@@ -114,6 +114,18 @@ function normalizeTaxRatePct(raw: number | null | undefined): number {
   return n > 1 ? n : n * 100;
 }
 
+function Currency({ amount }: { amount: number }) {
+  const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount ?? 0);
+  const dot = formatted.indexOf('.');
+  if (dot === -1) return <>{formatted}</>;
+  return (
+    <>
+      {formatted.slice(0, dot)}
+      <span style={{ fontSize: '0.65em', opacity: 0.72 }}>{formatted.slice(dot)}</span>
+    </>
+  );
+}
+
 export default function EstimatePage() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<EstimateResponse | null>(null);
@@ -167,7 +179,8 @@ export default function EstimatePage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const fmt = (n: number) => `$${(n ?? 0).toFixed(2)}`;
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0);
 
   const isTiered = Boolean(data?.is_tiered && data?.tiers?.length);
   const tiers: Tier[] = isTiered ? (data!.tiers ?? []) : [];
@@ -427,7 +440,7 @@ export default function EstimatePage() {
                   <span className="tier-star">⭐</span>
                 )}
                 <span className="tier-label">{tier.label}</span>
-                <span className="tier-total">{fmt(tier.total)}</span>
+                <span className="tier-total"><Currency amount={tier.total} /></span>
                 {tier.is_recommended && (
                   <span className="tier-badge">Recommended</span>
                 )}
@@ -499,7 +512,7 @@ export default function EstimatePage() {
                     Qty {item.quantity} × {fmt(item.unit_price)}
                   </div>
                 </div>
-                <div className="equipment-price">{fmt(lineTotal)}</div>
+                <div className="equipment-price"><Currency amount={lineTotal} /></div>
               </div>
             );
           })
@@ -538,7 +551,7 @@ export default function EstimatePage() {
         )}
         <div className="totals-row grand">
           <span>Total</span>
-          <span>{fmt(totals.total)}</span>
+          <span><Currency amount={totals.total} /></span>
         </div>
         {estimate.deposit_required && depositAmount != null && (
           <div className="deposit-badge">
