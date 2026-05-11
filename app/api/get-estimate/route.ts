@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
 try {
-  const { token } = await req.json();
+  const { token, preview } = await req.json();
   if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 });
 
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -22,7 +22,7 @@ try {
       Authorization: `Bearer ${supabaseKey}`,
       apikey: supabaseKey,
     },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, preview: preview === true }),
   });
 
   const text = await upstream.text();

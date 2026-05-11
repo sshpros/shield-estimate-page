@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import type SignatureCanvasType from 'react-signature-canvas';
 
 type LineItem = {
@@ -128,6 +128,8 @@ function Currency({ amount }: { amount: number }) {
 
 export default function EstimatePage() {
   const { token } = useParams<{ token: string }>();
+  const searchParams = useSearchParams();
+  const isPreview = searchParams.get('preview') === '1';
   const [data, setData] = useState<EstimateResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +159,7 @@ export default function EstimatePage() {
     fetch('/api/get-estimate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, preview: isPreview }),
     })
       .then((r) => r.json())
       .then((res) => {
@@ -241,6 +243,21 @@ export default function EstimatePage() {
   }, [data, isTiered, activeTier]);
 
   const submit = async (payload: any) => {
+    // Preview mode: simulate the interaction without writing anything to the DB.
+    if (isPreview) {
+      setSubmitting(true);
+      await new Promise((r) => setTimeout(r, 600));
+      setSubmitting(false);
+      setMode('view');
+      alert(
+        payload.action === 'accept'
+          ? '✓ Preview: In live mode this would accept the estimate and create a deposit invoice.'
+          : payload.action === 'decline'
+          ? '✕ Preview: In live mode this would decline the estimate.'
+          : '✎ Preview: In live mode this would submit a change request.'
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch('/api/submit-response', {
@@ -336,7 +353,8 @@ export default function EstimatePage() {
     );
 
   const { estimate, job } = data;
-  const terminal = [
+  // In preview mode always show the full interactive view regardless of status.
+  const terminal = !isPreview && [
     'Accepted',
     'Declined',
     'Expired',
@@ -349,6 +367,26 @@ export default function EstimatePage() {
 
   return (
     <div className="container">
+      {isPreview && (
+        <div style={{
+          background: 'rgba(168,85,247,0.15)',
+          border: '1px solid rgba(168,85,247,0.4)',
+          borderRadius: 10,
+          padding: '10px 16px',
+          marginBottom: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>👁</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#c084fc' }}>TECHNICIAN PREVIEW — READ ONLY</div>
+            <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 2 }}>
+              You can interact with all flows. No changes will be saved.
+            </div>
+          </div>
+        </div>
+      )}
       <div
         className="logo-wrap"
         style={{
