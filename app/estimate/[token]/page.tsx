@@ -10,6 +10,8 @@ type LineItem = {
   unit_price: number;
   total?: number;
   tier_index?: number;
+  unit_type?: string | null;
+  is_recurring?: boolean | null;
   primary_image_url?: string | null;
   gallery_image_urls?: string[];
   manufacturer?: string | null;
@@ -34,6 +36,7 @@ type Tier = {
   total: number;
   deposit_percent: number;
   deposit_amount: number;
+  monthly_total?: number;
 };
 
 type EstimateLink = {
@@ -199,7 +202,7 @@ export default function EstimatePage() {
   );
 
   const totals = useMemo(() => {
-    if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0 };
+    if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0, monthly: 0 };
 
     if (isTiered && activeTier) {
       return {
@@ -207,13 +210,18 @@ export default function EstimatePage() {
         labor: activeTier.labor_total,
         tax: activeTier.tax_amount,
         total: activeTier.total,
+        monthly: activeTier.monthly_total ?? 0,
       };
     }
 
-    const equipment = lineItems.reduce(
-      (sum, li) => sum + (li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0)),
-      0
-    );
+    const lineAmount = (li: LineItem) =>
+      li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0);
+    const equipment = lineItems
+      .filter((li) => !li.is_recurring)
+      .reduce((sum, li) => sum + lineAmount(li), 0);
+    const monthly = lineItems
+      .filter((li) => li.is_recurring)
+      .reduce((sum, li) => sum + lineAmount(li), 0);
     const labor =
       data.job.estimated_labor_cost ??
       (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
@@ -234,7 +242,7 @@ export default function EstimatePage() {
         ? Number(serverTotal)
         : taxable + tax;
 
-    return { equipment, labor, tax, total };
+    return { equipment, labor, tax, total, monthly };
   }, [data, lineItems, isTiered, activeTier]);
 
   const depositAmount = useMemo(() => {
@@ -548,9 +556,35 @@ export default function EstimatePage() {
                   )}
                   <div className="equipment-qty" style={{ marginTop: 6 }}>
                     Qty {item.quantity} × {fmt(item.unit_price)}
+                    {item.is_recurring
+                      ? '/mo'
+                      : item.unit_type && item.unit_type !== 'Each'
+                      ? `/${item.unit_type}`
+                      : ''}
                   </div>
+                  {item.is_recurring && (
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: '#60a5fa',
+                        background: 'rgba(59,130,246,0.15)',
+                        padding: '3px 8px',
+                        borderRadius: 20,
+                        marginTop: 6,
+                      }}
+                    >
+                      ↻ MONTHLY SERVICE
+                    </div>
+                  )}
                 </div>
-                <div className="equipment-price"><Currency amount={lineTotal} /></div>
+                <div className="equipment-price">
+                  <Currency amount={lineTotal} />
+                  {item.is_recurring && (
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>/mo</span>
+                  )}
+                </div>
               </div>
             );
           })
@@ -591,6 +625,17 @@ export default function EstimatePage() {
           <span>Total</span>
           <span><Currency amount={totals.total} /></span>
         </div>
+        {totals.monthly > 0 && (
+          <div className="totals-row" style={{ color: '#60a5fa', fontWeight: 600 }}>
+            <span>↻ Monthly Service</span>
+            <span>+{fmt(totals.monthly)}/mo</span>
+          </div>
+        )}
+        {totals.monthly > 0 && (
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+            Recurring service billed monthly — not included in the total above.
+          </div>
+        )}
         {estimate.deposit_required && depositAmount != null && (
           <div className="deposit-badge">
             {estimate.deposit_paid
