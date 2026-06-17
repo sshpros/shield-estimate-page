@@ -30,6 +30,8 @@ type Tier = {
   line_items: LineItem[];
   equipment_total: number;
   labor_total: number;
+  dispatch_fee?: number;
+  dispatch_itemized?: boolean;
   subtotal: number;
   tax_rate: number;
   tax_amount: number;
@@ -59,6 +61,8 @@ type EstimateLink = {
   tax_amount?: number | null;
   labor_total?: number | null;
   equipment_total?: number | null;
+  dispatch_fee?: number | null;
+  dispatch_itemized?: boolean | null;
   total_amount?: number | null;
 };
 
@@ -88,6 +92,8 @@ type EstimateResponse = {
   recommended_tier_index?: number;
   accepted_tier_index?: number;
   tier_labels?: string[];
+  dispatch_fee?: number | null;
+  dispatch_itemized?: boolean | null;
 };
 
 const DEFAULT_LOGO_URL =
@@ -202,12 +208,15 @@ export default function EstimatePage() {
   );
 
   const totals = useMemo(() => {
-    if (!data) return { equipment: 0, labor: 0, tax: 0, total: 0, monthly: 0 };
+    if (!data)
+      return { equipment: 0, labor: 0, dispatch: 0, dispatchItemized: true, tax: 0, total: 0, monthly: 0 };
 
     if (isTiered && activeTier) {
       return {
         equipment: activeTier.equipment_total,
         labor: activeTier.labor_total,
+        dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
+        dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
         tax: activeTier.tax_amount,
         total: activeTier.total,
         monthly: activeTier.monthly_total ?? 0,
@@ -225,7 +234,10 @@ export default function EstimatePage() {
     const labor =
       data.job.estimated_labor_cost ??
       (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
-    const taxable = equipment + labor;
+    const dispatch = data.dispatch_fee ?? data.estimate?.dispatch_fee ?? 0;
+    const dispatchItemized =
+      data.dispatch_itemized ?? data.estimate?.dispatch_itemized ?? true;
+    const taxable = equipment + labor + dispatch;
 
     const serverTax = data.estimate?.tax_amount;
     let tax: number;
@@ -242,7 +254,7 @@ export default function EstimatePage() {
         ? Number(serverTotal)
         : taxable + tax;
 
-    return { equipment, labor, tax, total, monthly };
+    return { equipment, labor, dispatch, dispatchItemized, tax, total, monthly };
   }, [data, lineItems, isTiered, activeTier]);
 
   const depositAmount = useMemo(() => {
@@ -604,13 +616,20 @@ export default function EstimatePage() {
           <span>Equipment</span>
           <span>{fmt(totals.equipment)}</span>
         </div>
-        {totals.labor > 0 && (
+        {totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch) > 0 && (
           <div className="totals-row">
             <span>
               Labor
               {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
+              {!totals.dispatchItemized && totals.dispatch > 0 ? ' + dispatch' : ''}
             </span>
-            <span>{fmt(totals.labor)}</span>
+            <span>{fmt(totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch))}</span>
+          </div>
+        )}
+        {totals.dispatchItemized && totals.dispatch > 0 && (
+          <div className="totals-row">
+            <span>Dispatch</span>
+            <span>{fmt(totals.dispatch)}</span>
           </div>
         )}
         {totals.tax > 0 && (
