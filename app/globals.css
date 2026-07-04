@@ -79,6 +79,8 @@ input, textarea { font-family: inherit; }
 .tier-total { font-size: 13px; color: #8b93a7; font-variant-numeric: tabular-nums; }
 .tier-btn-active .tier-total { color: #60a5fa; }
 .tier-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #facc15; background: rgba(234,179,8,.1); border-radius: 999px; padding: 2px 8px; margin-top: 2px; }
+.tier-btn-premium { border-color: rgba(168,85,247,.5); }
+.tier-badge-premium { color: #c084fc; background: rgba(168,85,247,.12); }
 
 .gallery-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .gallery-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; cursor: zoom-in; }
