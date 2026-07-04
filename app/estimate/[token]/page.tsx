@@ -26,6 +26,7 @@ type Tier = {
   index: number;
   label: string;
   is_recommended: boolean;
+  is_premium?: boolean;
   is_accepted: boolean;
   line_items: LineItem[];
   equipment_total: number;
@@ -491,16 +492,23 @@ export default function EstimatePage() {
                   'tier-btn',
                   selectedTierIndex === tier.index ? 'tier-btn-active' : '',
                   tier.is_recommended ? 'tier-btn-recommended' : '',
+                  tier.is_premium && !tier.is_recommended ? 'tier-btn-premium' : '',
                 ].filter(Boolean).join(' ')}
                 onClick={() => setSelectedTierIndex(tier.index)}
               >
                 {tier.is_recommended && (
                   <span className="tier-star">⭐</span>
                 )}
+                {tier.is_premium && !tier.is_recommended && (
+                  <span className="tier-star">👑</span>
+                )}
                 <span className="tier-label">{tier.label}</span>
                 <span className="tier-total"><Currency amount={tier.total} /></span>
                 {tier.is_recommended && (
                   <span className="tier-badge">Recommended</span>
+                )}
+                {tier.is_premium && !tier.is_recommended && (
+                  <span className="tier-badge tier-badge-premium">Premium</span>
                 )}
               </button>
             ))}
