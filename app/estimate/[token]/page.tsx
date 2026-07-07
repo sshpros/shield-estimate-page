@@ -34,6 +34,8 @@ type Tier = {
   dispatch_fee?: number;
   dispatch_itemized?: boolean;
   subtotal: number;
+  discount?: number;
+  discount_reason?: string;
   tax_rate: number;
   tax_amount: number;
   total: number;
@@ -80,6 +82,9 @@ type Job = {
   estimated_labor_cost?: number | null;
   estimated_labor_rate?: number | null;
   tax_rate?: number | null;
+  estimate_discount_amount?: number | null;
+  estimate_discount_percent?: number | null;
+  estimate_discount_reason?: string | null;
 };
 
 type EstimateResponse = {
@@ -210,7 +215,7 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, dispatch: 0, dispatchItemized: true, tax: 0, total: 0, monthly: 0 };
+      return { equipment: 0, labor: 0, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0 };
 
     if (isTiered && activeTier) {
       return {
@@ -218,6 +223,10 @@ export default function EstimatePage() {
         labor: activeTier.labor_total,
         dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
         dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
+        // Pre-discount subtotal so the Subtotal → Discount → Tax → Total column reconciles.
+        subtotal: activeTier.subtotal,
+        discount: activeTier.discount ?? 0,
+        discountReason: activeTier.discount_reason ?? '',
         tax: activeTier.tax_amount,
         total: activeTier.total,
         monthly: activeTier.monthly_total ?? 0,
@@ -238,24 +247,39 @@ export default function EstimatePage() {
     const dispatch = data.dispatch_fee ?? data.estimate?.dispatch_fee ?? 0;
     const dispatchItemized =
       data.dispatch_itemized ?? data.estimate?.dispatch_itemized ?? true;
-    const taxable = equipment + labor + dispatch;
+    const subtotal = equipment + labor + dispatch;
 
+    // Global estimate discount (percent wins over flat), applied to the
+    // pre-discount subtotal — mirrors the app/PDF and the tiered edge path.
+    const discountPct = Number(data.job.estimate_discount_percent ?? 0);
+    const discountAmt = Number(data.job.estimate_discount_amount ?? 0);
+    const rawDiscount = discountPct > 0 ? subtotal * (discountPct / 100) : discountAmt;
+    const discount = Math.max(0, Math.min(rawDiscount, subtotal));
+    const discountReason = data.job.estimate_discount_reason ?? '';
+    const discountedSubtotal = subtotal - discount;
+
+    const taxRatePct = normalizeTaxRatePct(data.job.tax_rate);
     const serverTax = data.estimate?.tax_amount;
     let tax: number;
-    if (serverTax != null && Number(serverTax) >= 0) {
+    if (discount > 0) {
+      // A discount is present — recompute tax on the discounted base so the
+      // column reconciles, rather than trusting a possibly pre-discount server value.
+      tax = discountedSubtotal * (taxRatePct / 100);
+    } else if (serverTax != null && Number(serverTax) >= 0) {
       tax = Number(serverTax);
     } else {
-      const taxRatePct = normalizeTaxRatePct(data.job.tax_rate);
-      tax = taxable * (taxRatePct / 100);
+      tax = discountedSubtotal * (taxRatePct / 100);
     }
 
     const serverTotal = data.estimate?.total_amount;
     const total =
-      serverTotal != null && Number(serverTotal) > 0
-        ? Number(serverTotal)
-        : taxable + tax;
+      discount > 0
+        ? discountedSubtotal + tax
+        : serverTotal != null && Number(serverTotal) > 0
+          ? Number(serverTotal)
+          : discountedSubtotal + tax;
 
-    return { equipment, labor, dispatch, dispatchItemized, tax, total, monthly };
+    return { equipment, labor, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly };
   }, [data, lineItems, isTiered, activeTier]);
 
   const depositAmount = useMemo(() => {
@@ -620,12 +644,12 @@ export default function EstimatePage() {
 
       <div className="card">
         <div className="card-title">Pricing</div>
-        <div className="totals-row">
+        <div className="totals-row item">
           <span>Equipment</span>
           <span>{fmt(totals.equipment)}</span>
         </div>
         {totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch) > 0 && (
-          <div className="totals-row">
+          <div className="totals-row item">
             <span>
               Labor
               {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
@@ -635,13 +659,25 @@ export default function EstimatePage() {
           </div>
         )}
         {totals.dispatchItemized && totals.dispatch > 0 && (
-          <div className="totals-row">
+          <div className="totals-row item">
             <span>Dispatch</span>
             <span>{fmt(totals.dispatch)}</span>
           </div>
         )}
+        {totals.discount > 0 && (
+          <>
+            <div className="totals-row subtotal">
+              <span>Subtotal</span>
+              <span>{fmt(totals.subtotal)}</span>
+            </div>
+            <div className="totals-row discount">
+              <span>Discount{totals.discountReason ? ` (${totals.discountReason})` : ''}</span>
+              <span>−{fmt(totals.discount)}</span>
+            </div>
+          </>
+        )}
         {totals.tax > 0 && (
-          <div className="totals-row">
+          <div className="totals-row tax">
             <span>
               Tax {displayTaxRatePct > 0 ? `(${displayTaxRatePct.toFixed(2)}%)` : ''}
             </span>
