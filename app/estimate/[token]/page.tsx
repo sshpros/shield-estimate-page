@@ -644,12 +644,12 @@ export default function EstimatePage() {
 
       <div className="card">
         <div className="card-title">Pricing</div>
-        <div className="totals-row item">
+        <div className="totals-row item equipment">
           <span>Equipment</span>
           <span>{fmt(totals.equipment)}</span>
         </div>
         {totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch) > 0 && (
-          <div className="totals-row item">
+          <div className="totals-row item labor">
             <span>
               Labor
               {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
@@ -659,7 +659,7 @@ export default function EstimatePage() {
           </div>
         )}
         {totals.dispatchItemized && totals.dispatch > 0 && (
-          <div className="totals-row item">
+          <div className="totals-row item dispatch">
             <span>Dispatch</span>
             <span>{fmt(totals.dispatch)}</span>
           </div>
