@@ -45,10 +45,11 @@ input, textarea { font-family: inherit; }
    bright white so the number column is easy to scan straight down. */
 .totals-row.item { color: #8b93a7; font-size: 14px; border-bottom: 1px solid #1a2030; }
 .totals-row.item > span:first-child { font-weight: 500; }
-.totals-row.item > span:last-child { color: #e8edf5; font-weight: 600; font-size: 15px; }
-.totals-row.item.equipment > span:first-child { color: #c084fc; } /* violet */
-.totals-row.item.labor > span:first-child { color: #60a5fa; }     /* blue */
-.totals-row.item.dispatch > span:first-child { color: #2dd4bf; }  /* teal */
+.totals-row.item > span:last-child { font-weight: 600; font-size: 15px; }
+/* Label AND value share the category color, so each number is tied to what it references */
+.totals-row.item.equipment > span { color: #c084fc; } /* violet */
+.totals-row.item.labor > span,
+.totals-row.item.dispatch > span { color: #60a5fa; }  /* blue — labor + dispatch */
 /* Subtotal — opens the summary block, a step bolder than the charges */
 .totals-row.subtotal { margin-top: 4px; color: #c9d1e0; font-weight: 600; }
 .totals-row.subtotal > span:last-child { color: #e8edf5; font-weight: 700; }
@@ -57,8 +58,8 @@ input, textarea { font-family: inherit; }
 .totals-row.discount > span:last-child { color: #22c55e; font-weight: 700; }
 /* Tax — amber summary line, distinct from the charges above */
 .totals-row.tax { font-size: 14px; }
-.totals-row.tax > span:first-child { color: #fbbf24; font-weight: 500; }
-.totals-row.tax > span:last-child { color: #e8edf5; }
+.totals-row.tax > span { color: #fbbf24; }
+.totals-row.tax > span:first-child { font-weight: 500; }
 /* Grand total — the anchor: bold, larger, stronger divider */
 .totals-row.grand { border-top: 2px solid #2b3446; padding-top: 14px; margin-top: 8px; font-size: 15px; font-weight: 700; color: #e8edf5; align-items: center; }
 .totals-row.grand > span:last-child { font-size: 24px; font-weight: 800; color: #ffffff; }
