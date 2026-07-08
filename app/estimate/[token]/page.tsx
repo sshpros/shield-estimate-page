@@ -85,6 +85,7 @@ type Job = {
   estimate_discount_amount?: number | null;
   estimate_discount_percent?: number | null;
   estimate_discount_reason?: string | null;
+  estimated_monthly_recurring?: number | null;
 };
 
 type EstimateResponse = {
@@ -240,7 +241,8 @@ export default function EstimatePage() {
       .reduce((sum, li) => sum + lineAmount(li), 0);
     const monthly = lineItems
       .filter((li) => li.is_recurring)
-      .reduce((sum, li) => sum + lineAmount(li), 0);
+      .reduce((sum, li) => sum + lineAmount(li), 0)
+      + Number(data.job.estimated_monthly_recurring ?? 0); // + system-level RMR
     const labor =
       data.job.estimated_labor_cost ??
       (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
