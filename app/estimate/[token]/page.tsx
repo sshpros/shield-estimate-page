@@ -31,6 +31,7 @@ type Tier = {
   line_items: LineItem[];
   equipment_total: number;
   labor_total: number;
+  labor_hours?: number | null;
   dispatch_fee?: number;
   dispatch_itemized?: boolean;
   subtotal: number;
@@ -216,12 +217,13 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0 };
+      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0 };
 
     if (isTiered && activeTier) {
       return {
         equipment: activeTier.equipment_total,
         labor: activeTier.labor_total,
+        laborHours: activeTier.labor_hours ?? null,
         dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
         dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
         // Pre-discount subtotal so the Subtotal → Discount → Tax → Total column reconciles.
@@ -281,7 +283,7 @@ export default function EstimatePage() {
           ? Number(serverTotal)
           : discountedSubtotal + tax;
 
-    return { equipment, labor, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly };
+    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly };
   }, [data, lineItems, isTiered, activeTier]);
 
   const depositAmount = useMemo(() => {
@@ -654,7 +656,7 @@ export default function EstimatePage() {
           <div className="totals-row item labor">
             <span>
               Labor
-              {job.estimated_labor_hours ? ` (${job.estimated_labor_hours} hrs)` : ''}
+              {totals.laborHours ? ` (${totals.laborHours} hrs)` : ''}
               {!totals.dispatchItemized && totals.dispatch > 0 ? ' + dispatch' : ''}
             </span>
             <span>{fmt(totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch))}</span>
