@@ -664,17 +664,17 @@ export default function EstimatePage() {
             <span>{fmt(totals.dispatch)}</span>
           </div>
         )}
+        {(totals.tax > 0 || totals.discount > 0) && (
+          <div className="totals-row subtotal">
+            <span>Subtotal</span>
+            <span>{fmt(totals.subtotal)}</span>
+          </div>
+        )}
         {totals.discount > 0 && (
-          <>
-            <div className="totals-row subtotal">
-              <span>Subtotal</span>
-              <span>{fmt(totals.subtotal)}</span>
-            </div>
-            <div className="totals-row discount">
-              <span>Discount{totals.discountReason ? ` (${totals.discountReason})` : ''}</span>
-              <span>−{fmt(totals.discount)}</span>
-            </div>
-          </>
+          <div className="totals-row discount">
+            <span>Discount{totals.discountReason ? ` (${totals.discountReason})` : ''}</span>
+            <span>−{fmt(totals.discount)}</span>
+          </div>
         )}
         {totals.tax > 0 && (
           <div className="totals-row tax">
@@ -689,13 +689,13 @@ export default function EstimatePage() {
           <span><Currency amount={totals.total} /></span>
         </div>
         {totals.monthly > 0 && (
-          <div className="totals-row" style={{ color: '#60a5fa', fontWeight: 600 }}>
+          <div className="totals-row monthly">
             <span>↻ Monthly Service</span>
             <span>+{fmt(totals.monthly)}/mo</span>
           </div>
         )}
         {totals.monthly > 0 && (
-          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
             Recurring service billed monthly — not included in the total above.
           </div>
         )}

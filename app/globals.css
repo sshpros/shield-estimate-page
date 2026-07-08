@@ -39,22 +39,26 @@ input, textarea { font-family: inherit; }
 .equipment-price { text-align: right; font-weight: 600; }
 .equipment-qty { font-size: 12px; color: #8b93a7; }
 
-.totals-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
-/* Line-item components (equipment / labor / dispatch) — quiet, so the eye groups them together */
-.totals-row.item { color: #8b93a7; font-size: 14px; }
-.totals-row.item > span:last-child { color: #c9d1e0; }
-/* Subtotal — opens the running-total block with a hairline divider */
-.totals-row.subtotal { border-top: 1px solid #1f2634; margin-top: 6px; padding-top: 12px; color: #c9d1e0; font-weight: 600; }
+.totals-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+/* Charges (equipment / labor / dispatch) — each its own hairline-divided row so they
+   read as distinct line items: muted label on the left, bright value on the right. */
+.totals-row.item { color: #8b93a7; font-size: 14px; border-bottom: 1px solid #1a2030; }
+.totals-row.item > span:last-child { color: #e8edf5; font-weight: 600; font-size: 15px; }
+/* Subtotal — opens the summary block, a step bolder than the charges */
+.totals-row.subtotal { margin-top: 4px; color: #c9d1e0; font-weight: 600; }
 .totals-row.subtotal > span:last-child { color: #e8edf5; font-weight: 700; }
 /* Discount — green savings, clearly distinct from charges */
 .totals-row.discount { color: #22c55e; font-weight: 600; }
 .totals-row.discount > span:last-child { color: #22c55e; font-weight: 700; }
-/* Tax — quiet like the components */
+/* Tax — quiet summary line */
 .totals-row.tax { color: #8b93a7; font-size: 14px; }
 .totals-row.tax > span:last-child { color: #c9d1e0; }
 /* Grand total — the anchor: bold, larger, stronger divider */
 .totals-row.grand { border-top: 2px solid #2b3446; padding-top: 14px; margin-top: 8px; font-size: 15px; font-weight: 700; color: #e8edf5; align-items: center; }
-.totals-row.grand > span:last-child { font-size: 22px; font-weight: 800; color: #ffffff; }
+.totals-row.grand > span:last-child { font-size: 24px; font-weight: 800; color: #ffffff; }
+/* Recurring monthly (RMR) — distinct blue callout box, set apart from the one-time total */
+.totals-row.monthly { margin-top: 12px; padding: 12px 14px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.28); border-radius: 10px; color: #60a5fa; font-weight: 600; }
+.totals-row.monthly > span:last-child { color: #60a5fa; font-weight: 700; }
 .deposit-badge { background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.3); border-radius: 10px; padding: 12px; margin-top: 12px; font-size: 14px; color: #60a5fa; }
 
 .btn { display: block; width: 100%; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 600; text-align: center; transition: opacity .15s; }
