@@ -105,7 +105,7 @@ type EstimateResponse = {
 };
 
 const DEFAULT_LOGO_URL =
-  'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo-3d.png?v=6';
+  'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo-3d.png?v=7';
 const PAYMENT_PAGE_URL =
   process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL || 'https://shield-payment-page.vercel.app';
 
