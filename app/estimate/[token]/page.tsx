@@ -656,7 +656,7 @@ export default function EstimatePage() {
           <div className="totals-row item labor">
             <span>
               Labor
-              {totals.laborHours ? ` (${totals.laborHours} hrs)` : ''}
+              {Number(totals.laborHours) > 0 ? ` (${totals.laborHours} hrs)` : ''}
               {!totals.dispatchItemized && totals.dispatch > 0 ? ' + dispatch' : ''}
             </span>
             <span>{fmt(totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch))}</span>
