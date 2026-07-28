@@ -44,7 +44,7 @@ type Tier = {
   deposit_amount: number;
   monthly_total?: number;
   monthly_original?: number;
-  multi_pay?: { months: number; monthly_amount: number }[];
+  multi_pay?: { months: number; monthly_amount: number; finance_pct?: number; finance_charge?: number }[];
 };
 
 type EstimateLink = {
@@ -107,7 +107,7 @@ type EstimateResponse = {
   dispatch_fee?: number | null;
   dispatch_itemized?: boolean | null;
   multi_pay_offered?: boolean;
-  multi_pay?: { months: number; monthly_amount: number }[];
+  multi_pay?: { months: number; monthly_amount: number; finance_pct?: number; finance_charge?: number }[];
 };
 
 const DEFAULT_LOGO_URL =
@@ -810,19 +810,34 @@ export default function EstimatePage() {
                     ? ` — ${fmt(depositAmount)} deposit today, balance at completion`
                     : ' — full balance invoiced'}
                 </button>
-                {plans.map((p) => (
-                  <button
-                    key={p.months}
-                    className={`reason-pill ${multiPayMonths === p.months ? 'active' : ''}`}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
-                    onClick={() => setMultiPayMonths(p.months)}
-                  >
-                    Multi-Pay — {p.months} monthly payments of {fmt(p.monthly_amount)}
-                    <span style={{ display: 'block', fontSize: 11, opacity: 0.7, marginTop: 2 }}>
-                      First payment today, then auto-charged monthly. No interest or fees.
-                    </span>
-                  </button>
-                ))}
+                {plans.map((p) => {
+                  const pct = Number(p.finance_pct ?? 0);
+                  const zeroPct = pct <= 0.005;
+                  return (
+                    <button
+                      key={p.months}
+                      className={`reason-pill ${multiPayMonths === p.months ? 'active' : ''}`}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
+                      onClick={() => setMultiPayMonths(p.months)}
+                    >
+                      Multi-Pay — {p.months} monthly payments of {fmt(p.monthly_amount)}
+                      {zeroPct && (
+                        <span style={{
+                          display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 999,
+                          background: 'rgba(34,197,94,0.15)', color: '#22c55e',
+                          fontSize: 11, fontWeight: 800, letterSpacing: 0.3,
+                        }}>
+                          0% FINANCING
+                        </span>
+                      )}
+                      <span style={{ display: 'block', fontSize: 11, opacity: 0.7, marginTop: 2 }}>
+                        {zeroPct
+                          ? 'First payment today, then auto-charged monthly. Zero interest, zero fees — same price, just split up.'
+                          : `First payment today, then auto-charged monthly. Includes a ${pct}% financing charge (${fmt(p.finance_charge ?? 0)}).`}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             );
           })()}
