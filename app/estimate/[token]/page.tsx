@@ -43,6 +43,8 @@ type Tier = {
   deposit_percent: number;
   deposit_amount: number;
   monthly_total?: number;
+  monthly_original?: number;
+  multi_pay?: { months: number; monthly_amount: number }[];
 };
 
 type EstimateLink = {
@@ -87,6 +89,8 @@ type Job = {
   estimate_discount_percent?: number | null;
   estimate_discount_reason?: string | null;
   estimated_monthly_recurring?: number | null;
+  mmr_discount_amount?: number | null;
+  mmr_discount_reason?: string | null;
 };
 
 type EstimateResponse = {
@@ -102,6 +106,8 @@ type EstimateResponse = {
   tier_labels?: string[];
   dispatch_fee?: number | null;
   dispatch_itemized?: boolean | null;
+  multi_pay_offered?: boolean;
+  multi_pay?: { months: number; monthly_amount: number }[];
 };
 
 const DEFAULT_LOGO_URL =
@@ -153,6 +159,7 @@ export default function EstimatePage() {
   const [mode, setMode] = useState<'view' | 'accept' | 'decline' | 'request'>('view');
   const [submitting, setSubmitting] = useState(false);
   const [signatureName, setSignatureName] = useState('');
+  const [multiPayMonths, setMultiPayMonths] = useState(0);
   const [declineReason, setDeclineReason] = useState('');
   const [declineNotes, setDeclineNotes] = useState('');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -217,7 +224,7 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0 };
+      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0 };
 
     if (isTiered && activeTier) {
       return {
@@ -233,6 +240,7 @@ export default function EstimatePage() {
         tax: activeTier.tax_amount,
         total: activeTier.total,
         monthly: activeTier.monthly_total ?? 0,
+        monthlyOriginal: activeTier.monthly_original ?? 0,
       };
     }
 
@@ -241,10 +249,14 @@ export default function EstimatePage() {
     const equipment = lineItems
       .filter((li) => !li.is_recurring)
       .reduce((sum, li) => sum + lineAmount(li), 0);
-    const monthly = lineItems
+    const rawMonthly = lineItems
       .filter((li) => li.is_recurring)
       .reduce((sum, li) => sum + lineAmount(li), 0)
       + Number(data.job.estimated_monthly_recurring ?? 0); // + system-level RMR
+    // MMR discount: dollars off the monthly rate the customer actually pays.
+    const mmrDiscount = Math.max(0, Number(data.job.mmr_discount_amount ?? 0));
+    const monthly = Math.max(0, rawMonthly - (rawMonthly > 0 ? mmrDiscount : 0));
+    const monthlyOriginal = mmrDiscount > 0 && rawMonthly > 0 ? rawMonthly : 0;
     const labor =
       data.job.estimated_labor_cost ??
       (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
@@ -283,7 +295,7 @@ export default function EstimatePage() {
           ? Number(serverTotal)
           : discountedSubtotal + tax;
 
-    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly };
+    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal };
   }, [data, lineItems, isTiered, activeTier]);
 
   const depositAmount = useMemo(() => {
@@ -369,6 +381,7 @@ export default function EstimatePage() {
       signature_base64,
       customer_signature_name: signatureName.trim(),
       ...(isTiered ? { accepted_tier_index: selectedTierIndex } : {}),
+      ...(multiPayMonths > 0 ? { multi_pay_months: multiPayMonths } : {}),
     });
   };
 
@@ -695,7 +708,14 @@ export default function EstimatePage() {
         {totals.monthly > 0 && (
           <div className="totals-row monthly">
             <span>↻ Monthly Service</span>
-            <span>+{fmt(totals.monthly)}/mo</span>
+            <span>
+              {totals.monthlyOriginal > totals.monthly + 0.005 && (
+                <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: 8, fontWeight: 400 }}>
+                  {fmt(totals.monthlyOriginal)}/mo
+                </span>
+              )}
+              +{fmt(totals.monthly)}/mo
+            </span>
           </div>
         )}
         {totals.monthly > 0 && (
@@ -773,6 +793,39 @@ export default function EstimatePage() {
           <div className="card-title">
             {isTiered ? `Sign to Accept — ${activeTier?.label ?? ''} Package` : 'Sign to Accept'}
           </div>
+          {(() => {
+            const plans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
+            if (!plans.length) return null;
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#e2e8f0' }}>
+                  How would you like to pay?
+                </div>
+                <button
+                  className={`reason-pill ${multiPayMonths === 0 ? 'active' : ''}`}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
+                  onClick={() => setMultiPayMonths(0)}
+                >
+                  Standard{estimate.deposit_required && depositAmount != null
+                    ? ` — ${fmt(depositAmount)} deposit today, balance at completion`
+                    : ' — full balance invoiced'}
+                </button>
+                {plans.map((p) => (
+                  <button
+                    key={p.months}
+                    className={`reason-pill ${multiPayMonths === p.months ? 'active' : ''}`}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
+                    onClick={() => setMultiPayMonths(p.months)}
+                  >
+                    Multi-Pay — {p.months} monthly payments of {fmt(p.monthly_amount)}
+                    <span style={{ display: 'block', fontSize: 11, opacity: 0.7, marginTop: 2 }}>
+                      First payment today, then auto-charged monthly. No interest or fees.
+                    </span>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           <div className="signature-wrap">
             {SigCanvas ? (
               <SigCanvas
@@ -807,6 +860,8 @@ export default function EstimatePage() {
           >
             {submitting
               ? 'Submitting…'
+              : multiPayMonths > 0
+              ? 'Accept & Pay First Installment'
               : estimate.deposit_required
               ? 'Accept & Continue to Deposit'
               : 'Accept Estimate'}
