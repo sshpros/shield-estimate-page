@@ -9,6 +9,8 @@ type LineItem = {
   quantity: number;
   unit_price: number;
   total?: number;
+  discount_amount?: number;
+  discount_reason?: string | null;
   tier_index?: number;
   unit_type?: string | null;
   is_recurring?: boolean | null;
@@ -224,7 +226,7 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0 };
+      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
 
     if (isTiered && activeTier) {
       return {
@@ -241,6 +243,9 @@ export default function EstimatePage() {
         total: activeTier.total,
         monthly: activeTier.monthly_total ?? 0,
         monthlyOriginal: activeTier.monthly_original ?? 0,
+        lineDiscounts: (activeTier.line_items ?? [])
+          .filter((li) => li.is_recurring !== true)
+          .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0),
       };
     }
 
@@ -295,7 +300,10 @@ export default function EstimatePage() {
           ? Number(serverTotal)
           : discountedSubtotal + tax;
 
-    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal };
+    const lineDiscounts = lineItems
+      .filter((li) => li.is_recurring !== true)
+      .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
+    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
   }, [data, lineItems, isTiered, activeTier]);
 
   const depositAmount = useMemo(() => {
@@ -565,8 +573,10 @@ export default function EstimatePage() {
           </div>
         ) : (
           lineItems.map((item, i) => {
+            const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
+            const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
             const lineTotal =
-              item.total ?? (item.quantity ?? 0) * (item.unit_price ?? 0);
+              item.total ?? (grossTotal - itemDiscount);
             const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
             return (
               <div className="equipment-item" key={i}>
@@ -641,9 +651,19 @@ export default function EstimatePage() {
                   )}
                 </div>
                 <div className="equipment-price">
+                  {itemDiscount > 0.005 && (
+                    <div style={{ fontSize: 12, color: '#8b93a7', textDecoration: 'line-through' }}>
+                      {fmt(grossTotal)}
+                    </div>
+                  )}
                   <Currency amount={lineTotal} />
                   {item.is_recurring && (
                     <span style={{ fontSize: 12, color: '#9ca3af' }}>/mo</span>
+                  )}
+                  {itemDiscount > 0.005 && (
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
+                      −{fmt(itemDiscount)}{item.discount_reason ? ` ${item.discount_reason}` : ''}
+                    </div>
                   )}
                 </div>
               </div>
@@ -665,6 +685,12 @@ export default function EstimatePage() {
           <span>Equipment</span>
           <span>{fmt(totals.equipment)}</span>
         </div>
+        {totals.lineDiscounts > 0.005 && (
+          <div className="totals-row item" style={{ color: '#22c55e' }}>
+            <span>Item discounts (already applied)</span>
+            <span>−{fmt(totals.lineDiscounts)}</span>
+          </div>
+        )}
         {totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch) > 0 && (
           <div className="totals-row item labor">
             <span>
@@ -723,6 +749,29 @@ export default function EstimatePage() {
             Recurring service billed monthly — not included in the total above.
           </div>
         )}
+        {(() => {
+          // Advertise Multi-Pay while the customer is still deciding — not
+          // only at the accept step.
+          const plans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
+          if (!plans.length || mode === 'accept') return null;
+          const pct = Number(plans[0]?.finance_pct ?? 0);
+          const cheapest = plans[plans.length - 1];
+          return (
+            <div style={{
+              marginTop: 10, padding: '10px 12px', borderRadius: 10,
+              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#22c55e', letterSpacing: 0.3 }}>
+                💳 MULTI-PAY AVAILABLE{pct <= 0.005 ? ' — 0% FINANCING' : ''}
+              </span>
+              <div style={{ fontSize: 12, color: '#c9d2e3', marginTop: 3 }}>
+                Split into {plans.map((p) => p.months).join(', ')} monthly payments
+                {cheapest ? ` — from ${fmt(cheapest.monthly_amount)}/mo` : ''}.
+                {pct > 0.005 ? ` Includes a ${pct}% financing charge.` : ' No interest or fees.'} Choose a plan when you accept.
+              </div>
+            </div>
+          );
+        })()}
         {estimate.deposit_required && depositAmount != null && (
           <div className="deposit-badge">
             {estimate.deposit_paid
