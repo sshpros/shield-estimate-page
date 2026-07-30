@@ -754,7 +754,7 @@ export default function EstimatePage() {
           // only at the accept step.
           const plans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
           if (!plans.length || mode === 'accept') return null;
-          const pct = Number(plans[0]?.finance_pct ?? 0);
+          const allZero = plans.every((p) => Number(p.finance_pct ?? 0) <= 0.005);
           const cheapest = plans[plans.length - 1];
           return (
             <div style={{
@@ -762,21 +762,29 @@ export default function EstimatePage() {
               background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
             }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: '#22c55e', letterSpacing: 0.3 }}>
-                💳 MULTI-PAY AVAILABLE{pct <= 0.005 ? ' — 0% FINANCING' : ''}
+                💳 MULTI-PAY AVAILABLE{allZero ? ' — 0% FINANCING' : ''}
               </span>
               <div style={{ fontSize: 12, color: '#c9d2e3', marginTop: 3 }}>
                 Split into {plans.map((p) => p.months).join(', ')} monthly payments
                 {cheapest ? ` — from ${fmt(cheapest.monthly_amount)}/mo` : ''}.
-                {pct > 0.005 ? ` Includes a ${pct}% financing charge.` : ' No interest or fees.'} Choose a plan when you accept.
+                {allZero ? ' No interest or fees.' : ' Financing charges shown per plan.'} Choose a plan when you accept.
               </div>
             </div>
           );
         })()}
         {estimate.deposit_required && depositAmount != null && (
           <div className="deposit-badge">
-            {estimate.deposit_paid
-              ? `✓ Deposit of ${fmt(depositAmount)} received`
-              : `Deposit of ${fmt(depositAmount)} required to start work`}
+            {(() => {
+              // With Multi-Pay on the table the amount due at approval depends
+              // on the plan the customer picks — don't promise a number.
+              const mpOffered = ((isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? []).length > 0;
+              if (estimate.deposit_paid) {
+                return mpOffered ? '✓ First payment received' : `✓ Deposit of ${fmt(depositAmount)} received`;
+              }
+              return mpOffered
+                ? 'A deposit is required to start work — the amount depends on the payment option you choose.'
+                : `Deposit of ${fmt(depositAmount)} required to start work`;
+            })()}
           </div>
         )}
       </div>
