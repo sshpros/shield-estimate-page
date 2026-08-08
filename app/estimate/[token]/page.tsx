@@ -12,6 +12,7 @@ type LineItem = {
   discount_amount?: number;
   discount_reason?: string | null;
   tier_index?: number;
+  section_name?: string | null;
   unit_type?: string | null;
   is_recurring?: boolean | null;
   primary_image_url?: string | null;
@@ -99,6 +100,7 @@ type EstimateResponse = {
   estimate: EstimateLink;
   job: Job;
   line_items?: LineItem[] | null;
+  estimate_sections?: { name: string; isReference?: boolean }[] | null;
   logo_url?: string | null;
   expired?: boolean;
   is_tiered?: boolean;
@@ -218,6 +220,34 @@ export default function EstimatePage() {
     if (isTiered && activeTier) return activeTier.line_items ?? [];
     return Array.isArray(data?.line_items) ? data!.line_items! : [];
   }, [data, isTiered, activeTier]);
+
+  // Estimate sections (Alarm / Lighting / Audio…): group the equipment list
+  // with per-section subtotals; reference sections show pricing but are
+  // excluded from the totals (excluded server-side too).
+  type SectionHeaderInfo = { name: string; isReference: boolean; subtotal: number };
+  const displayItems = useMemo<{ item: LineItem; header?: SectionHeaderInfo }[]>(() => {
+    const sections = data?.estimate_sections ?? [];
+    const lineAmount = (li: LineItem) =>
+      li.total ?? Math.max(0, (li.quantity ?? 0) * (li.unit_price ?? 0) - Number(li.discount_amount ?? 0));
+    if (!sections.length || !lineItems.some((li) => li.section_name)) {
+      return lineItems.map((item) => ({ item }));
+    }
+    const result: { item: LineItem; header?: SectionHeaderInfo }[] = [];
+    const emit = (name: string, isReference: boolean, items: LineItem[]) => {
+      if (!items.length) return;
+      const subtotal = items.filter((li) => !li.is_recurring).reduce((s, li) => s + lineAmount(li), 0);
+      items.forEach((item, idx) => {
+        result.push(idx === 0 ? { item, header: { name, isReference, subtotal } } : { item });
+      });
+    };
+    for (const s of sections) {
+      emit(s.name, !!s.isReference, lineItems.filter((li) => (li.section_name ?? '') === s.name));
+    }
+    emit('General', false, lineItems.filter(
+      (li) => !li.section_name || !sections.some((s) => s.name === li.section_name)
+    ));
+    return result;
+  }, [lineItems, data]);
 
   const displayTaxRatePct = useMemo(
     () => normalizeTaxRatePct(data?.job?.tax_rate ?? data?.estimate?.tax_rate ?? 0),
@@ -572,14 +602,38 @@ export default function EstimatePage() {
             No equipment listed on this estimate.
           </div>
         ) : (
-          lineItems.map((item, i) => {
+          displayItems.map(({ item, header }, i) => {
             const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
             const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
             const lineTotal =
               item.total ?? (grossTotal - itemDiscount);
             const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
             return (
-              <div className="equipment-item" key={i}>
+              <div key={i}>
+              {header && (
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 12px', marginTop: i === 0 ? 0 : 14, marginBottom: 8,
+                    borderRadius: 8,
+                    background: header.isReference ? 'rgba(217,119,6,0.12)' : 'rgba(59,130,246,0.10)',
+                    border: `1px solid ${header.isReference ? 'rgba(217,119,6,0.35)' : 'rgba(59,130,246,0.25)'}`,
+                  }}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: header.isReference ? '#d97706' : '#60a5fa' }}>
+                    {header.name.toUpperCase()}
+                    {header.isReference && (
+                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, color: '#d97706' }}>
+                        PRICED FOR REFERENCE — NOT INCLUDED IN TOTAL
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: header.isReference ? '#d97706' : '#9ca3af' }}>
+                    {fmt(header.subtotal)}
+                  </span>
+                </div>
+              )}
+              <div className="equipment-item">
                 {item.primary_image_url ? (
                   <img
                     src={item.primary_image_url}
@@ -666,6 +720,7 @@ export default function EstimatePage() {
                     </div>
                   )}
                 </div>
+              </div>
               </div>
             );
           })
