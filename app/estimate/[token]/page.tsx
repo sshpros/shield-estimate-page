@@ -62,6 +62,7 @@ type EstimateLink = {
   sync_version?: number;
   deposit_required?: boolean;
   deposit_amount?: number | null;
+  deposit_percent?: number | null;
   deposit_paid?: boolean;
   deposit_invoice_id?: string | null;
   customer_email?: string | null;
@@ -100,7 +101,7 @@ type EstimateResponse = {
   estimate: EstimateLink;
   job: Job;
   line_items?: LineItem[] | null;
-  estimate_sections?: { name: string; isReference?: boolean }[] | null;
+  estimate_sections?: { name: string; isReference?: boolean; customerAddable?: boolean }[] | null;
   logo_url?: string | null;
   expired?: boolean;
   is_tiered?: boolean;
@@ -112,6 +113,11 @@ type EstimateResponse = {
   dispatch_itemized?: boolean | null;
   multi_pay_offered?: boolean;
   multi_pay?: { months: number; monthly_amount: number; finance_pct?: number; finance_charge?: number }[];
+  multi_pay_config?: {
+    offered: boolean;
+    mins: { m3: number; m6: number; m12: number };
+    pcts: { p3: number; p6: number; p12: number };
+  };
 };
 
 const DEFAULT_LOGO_URL =
@@ -170,6 +176,8 @@ export default function EstimatePage() {
   const [logoSrc, setLogoSrc] = useState<string>(DEFAULT_LOGO_URL);
   const [logoFailed, setLogoFailed] = useState(false);
   const [selectedTierIndex, setSelectedTierIndex] = useState<number>(0);
+  // Optional (reference) sections the customer has added into their total.
+  const [addedSections, setAddedSections] = useState<string[]>([]);
 
   const [SigCanvas, setSigCanvas] = useState<any>(null);
   useEffect(() => {
@@ -223,12 +231,64 @@ export default function EstimatePage() {
 
   // Estimate sections (Alarm / Lighting / Audio…): group the equipment list
   // with per-section subtotals; reference sections show pricing but are
-  // excluded from the totals (excluded server-side too).
-  type SectionHeaderInfo = { name: string; isReference: boolean; subtotal: number };
+  // excluded from the totals (excluded server-side too) — unless the customer
+  // adds them back in below.
+  const lineAmount = (li: LineItem) =>
+    li.total ?? Math.max(0, (li.quantity ?? 0) * (li.unit_price ?? 0) - Number(li.discount_amount ?? 0));
+
+  const refSectionNames = useMemo(
+    () => new Set((data?.estimate_sections ?? []).filter((s) => s.isReference).map((s) => s.name)),
+    [data]
+  );
+  const addableSectionNames = useMemo(
+    () =>
+      new Set(
+        (data?.estimate_sections ?? [])
+          .filter((s) => s.isReference && s.customerAddable !== false)
+          .map((s) => s.name)
+      ),
+    [data]
+  );
+  const addedSet = useMemo(
+    () => new Set(addedSections.filter((n) => addableSectionNames.has(n))),
+    [addedSections, addableSectionNames]
+  );
+  const toggleSection = (name: string) =>
+    setAddedSections((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+
+  // Items that count toward the customer's total: everything outside reference
+  // sections, plus reference sections they've added.
+  const countedItems = useMemo(
+    () =>
+      lineItems.filter((li) => {
+        const sec = li.section_name ?? '';
+        return !refSectionNames.has(sec) || addedSet.has(sec);
+      }),
+    [lineItems, refSectionNames, addedSet]
+  );
+  // What the added sections contribute on top of the server-computed base.
+  const addedSums = useMemo(() => {
+    let oneTime = 0;
+    let monthly = 0;
+    for (const li of lineItems) {
+      if (!addedSet.has(li.section_name ?? '')) continue;
+      if (li.is_recurring) monthly += lineAmount(li);
+      else oneTime += lineAmount(li);
+    }
+    return { oneTime, monthly };
+  }, [lineItems, addedSet]);
+
+  type SectionHeaderInfo = {
+    name: string;
+    isReference: boolean;
+    addable: boolean;
+    added: boolean;
+    subtotal: number;
+  };
   const displayItems = useMemo<{ item: LineItem; header?: SectionHeaderInfo }[]>(() => {
     const sections = data?.estimate_sections ?? [];
-    const lineAmount = (li: LineItem) =>
-      li.total ?? Math.max(0, (li.quantity ?? 0) * (li.unit_price ?? 0) - Number(li.discount_amount ?? 0));
     if (!sections.length || !lineItems.some((li) => li.section_name)) {
       return lineItems.map((item) => ({ item }));
     }
@@ -236,8 +296,15 @@ export default function EstimatePage() {
     const emit = (name: string, isReference: boolean, items: LineItem[]) => {
       if (!items.length) return;
       const subtotal = items.filter((li) => !li.is_recurring).reduce((s, li) => s + lineAmount(li), 0);
+      const header: SectionHeaderInfo = {
+        name,
+        isReference,
+        addable: isReference && addableSectionNames.has(name),
+        added: isReference && addedSet.has(name),
+        subtotal,
+      };
       items.forEach((item, idx) => {
-        result.push(idx === 0 ? { item, header: { name, isReference, subtotal } } : { item });
+        result.push(idx === 0 ? { item, header } : { item });
       });
     };
     for (const s of sections) {
@@ -247,7 +314,7 @@ export default function EstimatePage() {
       (li) => !li.section_name || !sections.some((s) => s.name === li.section_name)
     ));
     return result;
-  }, [lineItems, data]);
+  }, [lineItems, data, addableSectionNames, addedSet]);
 
   const displayTaxRatePct = useMemo(
     () => normalizeTaxRatePct(data?.job?.tax_rate ?? data?.estimate?.tax_rate ?? 0),
@@ -259,32 +326,58 @@ export default function EstimatePage() {
       return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
 
     if (isTiered && activeTier) {
+      // Server tier totals already exclude reference sections. When the
+      // customer adds one, rebuild the money column on top of the tier base
+      // with the same formula the server uses (subtotal → discount → tax).
+      const lineDiscounts = countedItems
+        .filter((li) => li.is_recurring !== true)
+        .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
+      if (addedSums.oneTime <= 0 && addedSums.monthly <= 0) {
+        return {
+          equipment: activeTier.equipment_total,
+          labor: activeTier.labor_total,
+          laborHours: activeTier.labor_hours ?? null,
+          dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
+          dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
+          // Pre-discount subtotal so the Subtotal → Discount → Tax → Total column reconciles.
+          subtotal: activeTier.subtotal,
+          discount: activeTier.discount ?? 0,
+          discountReason: activeTier.discount_reason ?? '',
+          tax: activeTier.tax_amount,
+          total: activeTier.total,
+          monthly: activeTier.monthly_total ?? 0,
+          monthlyOriginal: activeTier.monthly_original ?? 0,
+          lineDiscounts,
+        };
+      }
+      const subtotal = activeTier.subtotal + addedSums.oneTime;
+      const discountPct = Number(data.job.estimate_discount_percent ?? 0);
+      const discountAmt = Number(data.job.estimate_discount_amount ?? 0);
+      const rawDiscount = discountPct > 0 ? subtotal * (discountPct / 100) : discountAmt;
+      const discount = Math.max(0, Math.min(rawDiscount, subtotal));
+      const taxRatePct = normalizeTaxRatePct(activeTier.tax_rate);
+      const tax = (subtotal - discount) * (taxRatePct / 100);
       return {
-        equipment: activeTier.equipment_total,
+        equipment: activeTier.equipment_total + addedSums.oneTime,
         labor: activeTier.labor_total,
         laborHours: activeTier.labor_hours ?? null,
         dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
         dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
-        // Pre-discount subtotal so the Subtotal → Discount → Tax → Total column reconciles.
-        subtotal: activeTier.subtotal,
-        discount: activeTier.discount ?? 0,
+        subtotal,
+        discount,
         discountReason: activeTier.discount_reason ?? '',
-        tax: activeTier.tax_amount,
-        total: activeTier.total,
-        monthly: activeTier.monthly_total ?? 0,
+        tax,
+        total: subtotal - discount + tax,
+        monthly: (activeTier.monthly_total ?? 0) + addedSums.monthly,
         monthlyOriginal: activeTier.monthly_original ?? 0,
-        lineDiscounts: (activeTier.line_items ?? [])
-          .filter((li) => li.is_recurring !== true)
-          .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0),
+        lineDiscounts,
       };
     }
 
-    const lineAmount = (li: LineItem) =>
-      li.total ?? (li.quantity ?? 0) * (li.unit_price ?? 0);
-    const equipment = lineItems
+    const equipment = countedItems
       .filter((li) => !li.is_recurring)
       .reduce((sum, li) => sum + lineAmount(li), 0);
-    const rawMonthly = lineItems
+    const rawMonthly = countedItems
       .filter((li) => li.is_recurring)
       .reduce((sum, li) => sum + lineAmount(li), 0)
       + Number(data.job.estimated_monthly_recurring ?? 0); // + system-level RMR
@@ -311,10 +404,11 @@ export default function EstimatePage() {
 
     const taxRatePct = normalizeTaxRatePct(data.job.tax_rate);
     const serverTax = data.estimate?.tax_amount;
+    // Recompute locally whenever the customer changed the scope (added
+    // sections) or a discount must reconcile; otherwise trust the snapshot.
+    const mustRecompute = discount > 0 || addedSet.size > 0;
     let tax: number;
-    if (discount > 0) {
-      // A discount is present — recompute tax on the discounted base so the
-      // column reconciles, rather than trusting a possibly pre-discount server value.
+    if (mustRecompute) {
       tax = discountedSubtotal * (taxRatePct / 100);
     } else if (serverTax != null && Number(serverTax) >= 0) {
       tax = Number(serverTax);
@@ -324,22 +418,59 @@ export default function EstimatePage() {
 
     const serverTotal = data.estimate?.total_amount;
     const total =
-      discount > 0
+      mustRecompute
         ? discountedSubtotal + tax
         : serverTotal != null && Number(serverTotal) > 0
           ? Number(serverTotal)
           : discountedSubtotal + tax;
 
-    const lineDiscounts = lineItems
+    const lineDiscounts = countedItems
       .filter((li) => li.is_recurring !== true)
       .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
     return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
-  }, [data, lineItems, isTiered, activeTier]);
+  }, [data, lineItems, isTiered, activeTier, countedItems, addedSums, addedSet]);
 
   const depositAmount = useMemo(() => {
-    if (isTiered && activeTier) return activeTier.deposit_amount;
+    // Percentage deposits scale with the configured total when the customer
+    // adds optional sections; fixed-dollar deposits stay as quoted.
+    if (isTiered && activeTier) {
+      if (addedSums.oneTime > 0 && Number(activeTier.deposit_percent ?? 0) > 0) {
+        return totals.total * (Number(activeTier.deposit_percent) / 100);
+      }
+      return activeTier.deposit_amount;
+    }
+    const pct = Number(data?.estimate?.deposit_percent ?? 0);
+    if (addedSums.oneTime > 0 && pct > 0) return totals.total * (pct / 100);
     return data?.estimate?.deposit_amount ?? null;
-  }, [data, isTiered, activeTier]);
+  }, [data, isTiered, activeTier, addedSums, totals]);
+
+  // Multi-Pay plans for the currently configured total: server-computed when
+  // the scope is untouched, recomputed from the raw config when sections were
+  // added (eligibility can change as the total grows).
+  const effectiveMultiPay = useMemo(() => {
+    const serverPlans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
+    const cfg = data?.multi_pay_config;
+    if (addedSums.oneTime <= 0 || !cfg?.offered) return serverPlans;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const total = totals.total;
+    return (
+      [
+        [3, cfg.mins.m3, cfg.pcts.p3],
+        [6, cfg.mins.m6, cfg.pcts.p6],
+        [12, cfg.mins.m12, cfg.pcts.p12],
+      ] as [number, number, number][]
+    )
+      .filter(([, min]) => total >= min)
+      .map(([months, , pct]) => {
+        const financedTotal = round2(total * (1 + pct / 100));
+        return {
+          months,
+          monthly_amount: round2(financedTotal / months),
+          finance_pct: pct,
+          finance_charge: round2(financedTotal - total),
+        };
+      });
+  }, [data, isTiered, activeTier, addedSums, totals]);
 
   const submit = async (payload: any) => {
     // Preview mode: simulate the interaction without writing anything to the DB.
@@ -419,7 +550,10 @@ export default function EstimatePage() {
       signature_base64,
       customer_signature_name: signatureName.trim(),
       ...(isTiered ? { accepted_tier_index: selectedTierIndex } : {}),
-      ...(multiPayMonths > 0 ? { multi_pay_months: multiPayMonths } : {}),
+      ...(addedSet.size > 0 ? { accepted_section_names: Array.from(addedSet) } : {}),
+      ...(multiPayMonths > 0 && effectiveMultiPay.some((p) => p.months === multiPayMonths)
+        ? { multi_pay_months: multiPayMonths }
+        : {}),
     });
   };
 
@@ -613,24 +747,43 @@ export default function EstimatePage() {
               {header && (
                 <div
                   style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '10px 12px', marginTop: i === 0 ? 0 : 14, marginBottom: 8,
                     borderRadius: 8,
-                    background: header.isReference ? 'rgba(217,119,6,0.12)' : 'rgba(59,130,246,0.10)',
-                    border: `1px solid ${header.isReference ? 'rgba(217,119,6,0.35)' : 'rgba(59,130,246,0.25)'}`,
+                    background: header.added ? 'rgba(34,197,94,0.10)' : header.isReference ? 'rgba(217,119,6,0.12)' : 'rgba(59,130,246,0.10)',
+                    border: `1px solid ${header.added ? 'rgba(34,197,94,0.4)' : header.isReference ? 'rgba(217,119,6,0.35)' : 'rgba(59,130,246,0.25)'}`,
                   }}
                 >
-                  <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: header.isReference ? '#d97706' : '#60a5fa' }}>
-                    {header.name.toUpperCase()}
-                    {header.isReference && (
-                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, color: '#d97706' }}>
-                        PRICED FOR REFERENCE — NOT INCLUDED IN TOTAL
-                      </span>
-                    )}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: header.isReference ? '#d97706' : '#9ca3af' }}>
-                    {fmt(header.subtotal)}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: header.added ? '#22c55e' : header.isReference ? '#d97706' : '#60a5fa' }}>
+                      {header.name.toUpperCase()}
+                      {header.added ? (
+                        <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, color: '#22c55e' }}>
+                          ✓ ADDED TO YOUR TOTAL
+                        </span>
+                      ) : header.isReference ? (
+                        <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, color: '#d97706' }}>
+                          PRICED FOR REFERENCE — NOT INCLUDED IN TOTAL
+                        </span>
+                      ) : null}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: header.added ? '#22c55e' : header.isReference ? '#d97706' : '#9ca3af' }}>
+                      {fmt(header.subtotal)}
+                    </span>
+                  </div>
+                  {header.addable && !terminal && (
+                    <button
+                      onClick={() => toggleSection(header.name)}
+                      style={{
+                        marginTop: 8, width: '100%', padding: '8px 10px', borderRadius: 8,
+                        fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        background: header.added ? 'transparent' : 'rgba(34,197,94,0.15)',
+                        border: `1px solid ${header.added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`,
+                        color: header.added ? '#8b93a7' : '#22c55e',
+                      }}
+                    >
+                      {header.added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(header.subtotal)}`}
+                    </button>
+                  )}
                 </div>
               )}
               <div className="equipment-item">
@@ -832,7 +985,7 @@ export default function EstimatePage() {
             {(() => {
               // With Multi-Pay on the table the amount due at approval depends
               // on the plan the customer picks — don't promise a number.
-              const mpOffered = ((isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? []).length > 0;
+              const mpOffered = effectiveMultiPay.length > 0;
               if (estimate.deposit_paid) {
                 return mpOffered ? '✓ First payment received' : `✓ Deposit of ${fmt(depositAmount)} received`;
               }
@@ -905,8 +1058,17 @@ export default function EstimatePage() {
           <div className="card-title">
             {isTiered ? `Sign to Accept — ${activeTier?.label ?? ''} Package` : 'Sign to Accept'}
           </div>
+          {addedSet.size > 0 && (
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: '#22c55e', marginBottom: 12,
+              padding: '8px 12px', borderRadius: 8,
+              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
+            }}>
+              Includes optional add-on{addedSet.size === 1 ? '' : 's'}: {Array.from(addedSet).join(', ')} — total {fmt(totals.total)}
+            </div>
+          )}
           {(() => {
-            const plans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
+            const plans = effectiveMultiPay;
             if (!plans.length) return null;
             return (
               <div style={{ marginBottom: 16 }}>
