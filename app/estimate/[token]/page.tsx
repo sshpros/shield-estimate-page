@@ -744,48 +744,58 @@ export default function EstimatePage() {
             const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
             return (
               <div key={i}>
-              {header && (
-                <div
-                  style={{
-                    padding: '10px 12px', marginTop: i === 0 ? 0 : 14, marginBottom: 8,
-                    borderRadius: 8,
-                    background: header.added ? 'rgba(34,197,94,0.10)' : header.isReference ? 'rgba(217,119,6,0.12)' : 'rgba(59,130,246,0.10)',
-                    border: `1px solid ${header.added ? 'rgba(34,197,94,0.4)' : header.isReference ? 'rgba(217,119,6,0.35)' : 'rgba(59,130,246,0.25)'}`,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: header.added ? '#22c55e' : header.isReference ? '#d97706' : '#60a5fa' }}>
-                      {header.name.toUpperCase()}
-                      {header.added ? (
-                        <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, color: '#22c55e' }}>
-                          ✓ ADDED TO YOUR TOTAL
-                        </span>
-                      ) : header.isReference ? (
-                        <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, color: '#d97706' }}>
-                          PRICED FOR REFERENCE — NOT INCLUDED IN TOTAL
-                        </span>
-                      ) : null}
-                    </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: header.added ? '#22c55e' : header.isReference ? '#d97706' : '#9ca3af' }}>
-                      {fmt(header.subtotal)}
-                    </span>
+              {header && (() => {
+                // Structural heading, not a chip: full-width, left-aligned,
+                // accent bar keyed to state, hairline rule separating sections.
+                const accent = header.added ? '#22c55e' : header.isReference ? '#d97706' : '#60a5fa';
+                const status = header.added
+                  ? '✓ Added to your total'
+                  : header.isReference
+                    ? 'Priced for reference — not included in total'
+                    : null;
+                return (
+                  <div
+                    style={{
+                      marginTop: i === 0 ? 0 : 24, marginBottom: 6,
+                      borderTop: i === 0 ? 'none' : '1px solid #1f2634',
+                      paddingTop: i === 0 ? 0 : 18,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, minWidth: 0 }}>
+                        <span style={{ width: 4, borderRadius: 2, background: accent, flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.4, color: '#e5e9f2', textTransform: 'uppercase' }}>
+                            {header.name}
+                          </div>
+                          {status && (
+                            <div style={{ fontSize: 11, fontWeight: 600, color: accent, marginTop: 2 }}>
+                              {status}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: accent, alignSelf: 'center', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                        {fmt(header.subtotal)}
+                      </span>
+                    </div>
+                    {header.addable && !terminal && (
+                      <button
+                        onClick={() => toggleSection(header.name)}
+                        style={{
+                          marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 8,
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                          background: header.added ? 'transparent' : 'rgba(34,197,94,0.15)',
+                          border: `1px solid ${header.added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`,
+                          color: header.added ? '#8b93a7' : '#22c55e',
+                        }}
+                      >
+                        {header.added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(header.subtotal)}`}
+                      </button>
+                    )}
                   </div>
-                  {header.addable && !terminal && (
-                    <button
-                      onClick={() => toggleSection(header.name)}
-                      style={{
-                        marginTop: 8, width: '100%', padding: '8px 10px', borderRadius: 8,
-                        fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                        background: header.added ? 'transparent' : 'rgba(34,197,94,0.15)',
-                        border: `1px solid ${header.added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`,
-                        color: header.added ? '#8b93a7' : '#22c55e',
-                      }}
-                    >
-                      {header.added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(header.subtotal)}`}
-                    </button>
-                  )}
-                </div>
-              )}
+                );
+              })()}
               <div className="equipment-item">
                 {item.primary_image_url ? (
                   <img
