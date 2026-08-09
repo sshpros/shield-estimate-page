@@ -200,6 +200,9 @@ export default function EstimatePage() {
       .then((r) => r.json())
       .then((res) => {
         if (res.error) setError(res.error);
+        // Expired/superseded links come back as a slim payload with no job —
+        // rendering it crashed the page (data.job.* in the totals memo).
+        else if (res.expired || !res.job) setError('This estimate has expired. Please contact us for an updated one.');
         else {
           setData(res);
           const resolved = resolveLogoUrl(res?.logo_url);
