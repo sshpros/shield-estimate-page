@@ -220,6 +220,106 @@ export default function EstimatePage() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0);
 
+  const renderEquipmentRow = (item: LineItem, i: number) => {
+    const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
+    const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
+    const lineTotal = item.total ?? (grossTotal - itemDiscount);
+    const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
+    return (
+      <div key={i}>
+              <div className="equipment-item">
+                {item.primary_image_url ? (
+                  <img
+                    src={item.primary_image_url}
+                    alt={item.name}
+                    className="equipment-img"
+                    onClick={() => setLightboxImage(item.primary_image_url!)}
+                    style={{ cursor: 'zoom-in' }}
+                  />
+                ) : (
+                  <div className="equipment-img-placeholder">📦</div>
+                )}
+                <div className="equipment-details">
+                  <div className="equipment-name">{item.name}</div>
+                  {(item.manufacturer || item.model_number) && (
+                    <div className="equipment-meta">
+                      {[item.manufacturer, item.model_number].filter(Boolean).join(' · ')}
+                      {item.warranty_months ? ` · ${item.warranty_months}mo warranty` : ''}
+                    </div>
+                  )}
+                  {item.short_description && (
+                    <div className="equipment-desc">{item.short_description}</div>
+                  )}
+                  {item.features && item.features.length > 0 && (
+                    <ul className="equipment-features">
+                      {item.features.slice(0, 5).map((f, idx) => (
+                        <li key={idx}>
+                          <span className="feature-check">✓</span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {gallery.length > 0 && (
+                    <div className="gallery-strip">
+                      {gallery.slice(0, 6).map((url, idx) => (
+                        <img
+                          key={idx}
+                          src={url}
+                          alt={`${item.name} ${idx + 1}`}
+                          className="gallery-thumb"
+                          onClick={() => setLightboxImage(url)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="equipment-qty" style={{ marginTop: 6 }}>
+                    Qty {item.quantity} × {fmt(item.unit_price)}
+                    {item.is_recurring
+                      ? '/mo'
+                      : item.unit_type && item.unit_type !== 'Each'
+                      ? `/${item.unit_type}`
+                      : ''}
+                  </div>
+                  {item.is_recurring && (
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: '#60a5fa',
+                        background: 'rgba(59,130,246,0.15)',
+                        padding: '3px 8px',
+                        borderRadius: 20,
+                        marginTop: 6,
+                      }}
+                    >
+                      ↻ MONTHLY SERVICE
+                    </div>
+                  )}
+                </div>
+                <div className="equipment-price">
+                  {itemDiscount > 0.005 && (
+                    <div style={{ fontSize: 12, color: '#8b93a7', textDecoration: 'line-through' }}>
+                      {fmt(grossTotal)}
+                    </div>
+                  )}
+                  <Currency amount={lineTotal} />
+                  {item.is_recurring && (
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>/mo</span>
+                  )}
+                  {itemDiscount > 0.005 && (
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
+                      −{fmt(itemDiscount)}{item.discount_reason ? ` ${item.discount_reason}` : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
+      </div>
+    );
+  };
+
+
   const isTiered = Boolean(data?.is_tiered && data?.tiers?.length);
   const tiers: Tier[] = isTiered ? (data!.tiers ?? []) : [];
   const activeTier: Tier | null = isTiered ? (tiers[selectedTierIndex] ?? tiers[0] ?? null) : null;
@@ -308,13 +408,29 @@ export default function EstimatePage() {
       });
     };
     for (const s of sections) {
-      emit(s.name, !!s.isReference, lineItems.filter((li) => (li.section_name ?? '') === s.name));
+      // Reference sections render in their own Add-Ons card below the totals.
+      if (s.isReference) continue;
+      emit(s.name, false, lineItems.filter((li) => (li.section_name ?? '') === s.name));
     }
     emit('General', false, lineItems.filter(
       (li) => !li.section_name || !sections.some((s) => s.name === li.section_name)
     ));
     return result;
   }, [lineItems, data, addableSectionNames, addedSet]);
+
+  // Reference sections: their own browse-and-add card under the Pricing card.
+  const referenceBlocks = useMemo(
+    () =>
+      (data?.estimate_sections ?? [])
+        .filter((s) => s.isReference)
+        .map((s) => {
+          const items = lineItems.filter((li) => (li.section_name ?? '') === s.name);
+          const subtotal = items.filter((li) => !li.is_recurring).reduce((sum, li) => sum + lineAmount(li), 0);
+          return { section: s, items, subtotal };
+        })
+        .filter((b) => b.items.length > 0),
+    [data, lineItems]
+  );
 
   const displayTaxRatePct = useMemo(
     () => normalizeTaxRatePct(data?.job?.tax_rate ?? data?.estimate?.tax_rate ?? 0),
@@ -735,13 +851,12 @@ export default function EstimatePage() {
           <div style={{ color: '#8b93a7', padding: '8px 0' }}>
             No equipment listed on this estimate.
           </div>
+        ) : displayItems.length === 0 && referenceBlocks.length > 0 ? (
+          <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+            All equipment on this estimate is optional — browse the Add-Ons below.
+          </div>
         ) : (
           displayItems.map(({ item, header }, i) => {
-            const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
-            const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
-            const lineTotal =
-              item.total ?? (grossTotal - itemDiscount);
-            const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
             return (
               <div key={i}>
               {header && (() => {
@@ -796,94 +911,7 @@ export default function EstimatePage() {
                   </div>
                 );
               })()}
-              <div className="equipment-item">
-                {item.primary_image_url ? (
-                  <img
-                    src={item.primary_image_url}
-                    alt={item.name}
-                    className="equipment-img"
-                    onClick={() => setLightboxImage(item.primary_image_url!)}
-                    style={{ cursor: 'zoom-in' }}
-                  />
-                ) : (
-                  <div className="equipment-img-placeholder">📦</div>
-                )}
-                <div className="equipment-details">
-                  <div className="equipment-name">{item.name}</div>
-                  {(item.manufacturer || item.model_number) && (
-                    <div className="equipment-meta">
-                      {[item.manufacturer, item.model_number].filter(Boolean).join(' · ')}
-                      {item.warranty_months ? ` · ${item.warranty_months}mo warranty` : ''}
-                    </div>
-                  )}
-                  {item.short_description && (
-                    <div className="equipment-desc">{item.short_description}</div>
-                  )}
-                  {item.features && item.features.length > 0 && (
-                    <ul className="equipment-features">
-                      {item.features.slice(0, 5).map((f, idx) => (
-                        <li key={idx}>
-                          <span className="feature-check">✓</span>
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {gallery.length > 0 && (
-                    <div className="gallery-strip">
-                      {gallery.slice(0, 6).map((url, idx) => (
-                        <img
-                          key={idx}
-                          src={url}
-                          alt={`${item.name} ${idx + 1}`}
-                          className="gallery-thumb"
-                          onClick={() => setLightboxImage(url)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  <div className="equipment-qty" style={{ marginTop: 6 }}>
-                    Qty {item.quantity} × {fmt(item.unit_price)}
-                    {item.is_recurring
-                      ? '/mo'
-                      : item.unit_type && item.unit_type !== 'Each'
-                      ? `/${item.unit_type}`
-                      : ''}
-                  </div>
-                  {item.is_recurring && (
-                    <div
-                      style={{
-                        display: 'inline-block',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: '#60a5fa',
-                        background: 'rgba(59,130,246,0.15)',
-                        padding: '3px 8px',
-                        borderRadius: 20,
-                        marginTop: 6,
-                      }}
-                    >
-                      ↻ MONTHLY SERVICE
-                    </div>
-                  )}
-                </div>
-                <div className="equipment-price">
-                  {itemDiscount > 0.005 && (
-                    <div style={{ fontSize: 12, color: '#8b93a7', textDecoration: 'line-through' }}>
-                      {fmt(grossTotal)}
-                    </div>
-                  )}
-                  <Currency amount={lineTotal} />
-                  {item.is_recurring && (
-                    <span style={{ fontSize: 12, color: '#9ca3af' }}>/mo</span>
-                  )}
-                  {itemDiscount > 0.005 && (
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
-                      −{fmt(itemDiscount)}{item.discount_reason ? ` ${item.discount_reason}` : ''}
-                    </div>
-                  )}
-                </div>
-              </div>
+              {renderEquipmentRow(item, i)}
               </div>
             );
           })
@@ -1006,6 +1034,45 @@ export default function EstimatePage() {
           </div>
         )}
       </div>
+
+      {referenceBlocks.length > 0 && (
+        <div className="card">
+          <div className="card-title">Optional Add-Ons — Priced for Reference</div>
+          <p style={{ fontSize: 12, color: '#8b93a7', margin: '0 0 4px' }}>
+            These are not part of your estimate total. Browse pricing and tap Add to include one.
+          </p>
+          {referenceBlocks.map(({ section, items, subtotal }) => {
+            const added = addedSet.has(section.name);
+            const addable = addableSectionNames.has(section.name);
+            const accent = added ? '#22c55e' : '#d97706';
+            return (
+              <div key={section.name} style={{ marginTop: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, minWidth: 0 }}>
+                    <span style={{ width: 4, borderRadius: 2, background: accent, flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.4, color: '#e5e9f2', textTransform: 'uppercase' }}>{section.name}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: accent, marginTop: 2 }}>
+                        {added ? '✓ Added to your total' : 'Priced for reference — not included in total'}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: accent, alignSelf: 'center', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{fmt(subtotal)}</span>
+                </div>
+                {addable && !terminal && (
+                  <button
+                    onClick={() => toggleSection(section.name)}
+                    style={{ marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: added ? 'transparent' : 'rgba(34,197,94,0.15)', border: `1px solid ${added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`, color: added ? '#8b93a7' : '#22c55e' }}
+                  >
+                    {added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(subtotal)}`}
+                  </button>
+                )}
+                {items.map((item, idx) => renderEquipmentRow(item, idx))}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {!terminal && mode === 'view' && (
         <>
