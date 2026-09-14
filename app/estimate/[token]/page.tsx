@@ -36,6 +36,7 @@ type Tier = {
   labor_total: number;
   labor_hours?: number | null;
   dispatch_fee?: number;
+  dispatch_discount?: number;
   dispatch_itemized?: boolean;
   subtotal: number;
   discount?: number;
@@ -72,6 +73,7 @@ type EstimateLink = {
   labor_total?: number | null;
   equipment_total?: number | null;
   dispatch_fee?: number | null;
+  dispatch_discount?: number | null;
   dispatch_itemized?: boolean | null;
   total_amount?: number | null;
 };
@@ -110,6 +112,7 @@ type EstimateResponse = {
   accepted_tier_index?: number;
   tier_labels?: string[];
   dispatch_fee?: number | null;
+  dispatch_discount?: number | null;
   dispatch_itemized?: boolean | null;
   multi_pay_offered?: boolean;
   multi_pay?: { months: number; monthly_amount: number; finance_pct?: number; finance_charge?: number }[];
@@ -442,7 +445,7 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
+      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchGross: 0, dispatchDiscount: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
 
     if (isTiered && activeTier) {
       // Server tier totals already exclude reference sections. When the
@@ -456,7 +459,9 @@ export default function EstimatePage() {
           equipment: activeTier.equipment_total,
           labor: activeTier.labor_total,
           laborHours: activeTier.labor_hours ?? null,
-          dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
+          dispatch: Math.max(0, (activeTier.dispatch_fee ?? data.dispatch_fee ?? 0) - (activeTier.dispatch_discount ?? data.dispatch_discount ?? 0)),
+          dispatchGross: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
+          dispatchDiscount: Math.min(activeTier.dispatch_discount ?? data.dispatch_discount ?? 0, activeTier.dispatch_fee ?? data.dispatch_fee ?? 0),
           dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
           // Pre-discount subtotal so the Subtotal → Discount → Tax → Total column reconciles.
           subtotal: activeTier.subtotal,
@@ -480,7 +485,9 @@ export default function EstimatePage() {
         equipment: activeTier.equipment_total + addedSums.oneTime,
         labor: activeTier.labor_total,
         laborHours: activeTier.labor_hours ?? null,
-        dispatch: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
+        dispatch: Math.max(0, (activeTier.dispatch_fee ?? data.dispatch_fee ?? 0) - (activeTier.dispatch_discount ?? data.dispatch_discount ?? 0)),
+        dispatchGross: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
+        dispatchDiscount: Math.min(activeTier.dispatch_discount ?? data.dispatch_discount ?? 0, activeTier.dispatch_fee ?? data.dispatch_fee ?? 0),
         dispatchItemized: activeTier.dispatch_itemized ?? data.dispatch_itemized ?? true,
         subtotal,
         discount,
@@ -507,7 +514,10 @@ export default function EstimatePage() {
     const labor =
       data.job.estimated_labor_cost ??
       (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
-    const dispatch = data.dispatch_fee ?? data.estimate?.dispatch_fee ?? 0;
+    const dispatchGross = data.dispatch_fee ?? data.estimate?.dispatch_fee ?? 0;
+    const dispatchDiscount = Math.min(
+      Number(data.dispatch_discount ?? data.estimate?.dispatch_discount ?? 0), dispatchGross);
+    const dispatch = Math.max(0, dispatchGross - dispatchDiscount);
     const dispatchItemized =
       data.dispatch_itemized ?? data.estimate?.dispatch_itemized ?? true;
     const subtotal = equipment + labor + dispatch;
@@ -546,7 +556,7 @@ export default function EstimatePage() {
     const lineDiscounts = countedItems
       .filter((li) => li.is_recurring !== true)
       .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
-    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
+    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchGross, dispatchDiscount, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
   }, [data, lineItems, isTiered, activeTier, countedItems, addedSums, addedSet]);
 
   const depositAmount = useMemo(() => {
@@ -953,7 +963,12 @@ export default function EstimatePage() {
         {totals.dispatchItemized && totals.dispatch > 0 && (
           <div className="totals-row item dispatch">
             <span>Dispatch</span>
-            <span>{fmt(totals.dispatch)}</span>
+            <span>
+              {totals.dispatchDiscount > 0 && (
+                <s style={{ opacity: 0.55, marginRight: 8, fontWeight: 400 }}>{fmt(totals.dispatchGross)}</s>
+              )}
+              {fmt(totals.dispatch)}
+            </span>
           </div>
         )}
         {(totals.tax > 0 || totals.discount > 0) && (
