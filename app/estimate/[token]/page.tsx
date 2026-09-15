@@ -23,6 +23,7 @@ type LineItem = {
   features?: string[] | null;
   warranty_months?: number | null;
   warranty_description?: string | null;
+  store_url?: string | null;
 };
 
 type Tier = {
@@ -255,6 +256,28 @@ export default function EstimatePage() {
                   )}
                   {item.short_description && (
                     <div className="equipment-desc">{item.short_description}</div>
+                  )}
+                  {item.store_url && (
+                    <a
+                      href={item.store_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        marginTop: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: '#60a5fa',
+                        textDecoration: 'none',
+                        border: '1px solid rgba(59,130,246,0.35)',
+                        borderRadius: 20,
+                        padding: '4px 11px',
+                      }}
+                    >
+                      View in our store ↗
+                    </a>
                   )}
                   {item.features && item.features.length > 0 && (
                     <ul className="equipment-features">
