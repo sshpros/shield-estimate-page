@@ -1117,9 +1117,11 @@ export default function EstimatePage() {
 
       {!terminal && mode === 'view' && (
         <>
+          <div className="glow-wrap">
           <button className="btn btn-primary" onClick={() => setMode('accept')}>
             {isTiered ? `Accept ${activeTier?.label ?? ''} Package` : 'Accept Estimate'}
           </button>
+          </div>
           <div className="btn-row">
             <button className="btn btn-secondary" onClick={() => setMode('request')}>
               Request Changes
