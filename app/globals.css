@@ -109,3 +109,18 @@ input, textarea { font-family: inherit; }
 
 .gallery-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .gallery-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; cursor: zoom-in; }
+
+/* Rotating glow ring for THE conversion button (one per page).
+   @property animates the conic angle (Safari 16.4+); older browsers show
+   the plain button. Wrapper radius 14 = button 12 + 2px ring (concentric). */
+@property --glow-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.glow-wrap { position: relative; border-radius: 14px; isolation: isolate; margin-bottom: 12px; }
+.glow-wrap .btn { margin-bottom: 0; }
+.glow-wrap::before, .glow-wrap::after {
+  content: ""; position: absolute; inset: -2px; z-index: -1; border-radius: 14px;
+  background: conic-gradient(from var(--glow-angle), #1a5fc7, #7db8ff, #2563eb, #b7d7ff, #1a5fc7);
+  animation: glow-rotate 3.5s linear infinite;
+}
+.glow-wrap::after { filter: blur(16px); opacity: 0.5; }
+@keyframes glow-rotate { to { --glow-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .glow-wrap::before, .glow-wrap::after { animation: none; } }
