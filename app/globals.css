@@ -124,3 +124,66 @@ input, textarea { font-family: inherit; }
 .glow-wrap::after { filter: blur(16px); opacity: 0.5; }
 @keyframes glow-rotate { to { --glow-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) { .glow-wrap::before, .glow-wrap::after { animation: none; } }
+
+/* ---- Interactive design proposal (/proposal/[token]) ---- */
+.pp{max-width:52rem;margin:0 auto;padding:2rem 1.1rem 5rem;color:#e8ecf3;font-size:16px;line-height:1.55;}
+.pp-err{display:flex;align-items:center;justify-content:center;min-height:60vh;color:#9aa5b4;}
+.pp-head{display:flex;justify-content:space-between;gap:1rem;border-bottom:3px solid #2563eb;padding-bottom:1rem;margin-bottom:1.3rem;}
+.pp-brand{font-weight:800;letter-spacing:.03em;}
+.pp-brand em{color:#4d9fe8;font-style:normal;}
+.pp-brand span{display:block;font-size:.68rem;letter-spacing:.2em;color:#9aa5b4;font-weight:600;margin-top:2px;}
+.pp-meta{text-align:right;font-size:.8rem;color:#9aa5b4;line-height:1.45;}
+.pp-title{font-size:1.75rem;line-height:1.15;margin:.3rem 0;}
+.pp-sub{color:#9aa5b4;margin:0 0 1.1rem;}
+.pp-lede{background:#171d27;border:1px solid #28303c;border-left:3px solid #4d9fe8;border-radius:10px;padding:1rem 1.2rem;font-size:.93rem;margin-bottom:1rem;}
+.pp-nav{position:sticky;top:0;z-index:30;display:flex;gap:.4rem;overflow-x:auto;padding:.6rem 0;background:rgba(15,19,26,.92);backdrop-filter:blur(10px);margin:0 -1.1rem 1rem;padding-left:1.1rem;}
+.pp-nav a{white-space:nowrap;font-size:.78rem;font-weight:600;color:#9aa5b4;border:1px solid #28303c;border-radius:20px;padding:.28rem .75rem;text-decoration:none;}
+.pp-nav a:hover{color:#fff;border-color:#4d9fe8;}
+.pp-band{background:#12325a;color:#fff;border-radius:10px;padding:.55rem 1rem;margin:2.2rem 0 .4rem;font-weight:700;display:flex;justify-content:space-between;gap:1rem;font-size:1rem;}
+.pp-note{color:#9aa5b4;font-size:.88rem;margin:.4rem 0 .7rem;}
+.pp-legend{background:#171d27;border:1px solid #28303c;border-radius:10px;padding:.7rem .9rem;font-size:.8rem;color:#9aa5b4;margin-bottom:.7rem;}
+.pp-legend b{text-transform:uppercase;font-size:.7rem;letter-spacing:.06em;margin-right:.4rem;}
+.pp-sheets{display:grid;gap:1rem;}
+.pp-sheet{display:block;background:#171d27;border:1px solid #28303c;border-radius:12px;padding:.5rem;cursor:zoom-in;text-align:center;}
+.pp-sheet img{width:100%;border-radius:8px;display:block;}
+.pp-sheet span{display:block;color:#9aa5b4;font-size:.8rem;padding:.5rem 0 .2rem;}
+.pp-card{background:#171d27;border:1px solid #28303c;border-radius:12px;overflow:hidden;margin:.4rem 0;}
+.pp-tw{overflow-x:auto;}
+.pp table{border-collapse:collapse;width:100%;font-size:.87rem;}
+.pp th{text-align:left;color:#9aa5b4;font-weight:600;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;padding:.55rem .8rem;border-bottom:1px solid #28303c;background:#141a23;}
+.pp td{padding:.5rem .8rem;border-bottom:1px solid #222834;vertical-align:top;}
+.pp tr:last-child td{border-bottom:none;}
+.pp td.n,.pp th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.pp td.q,.pp th.q{text-align:center;width:2.8rem;}
+.pp-floor-head td{background:#12325a;color:#fff;font-weight:800;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;}
+.pp-floor-total td{background:#1a2233;color:#7db8ff;font-weight:800;border-top:2px solid #2c4a78;}
+.pp-room{color:#c6cede;font-weight:600;}
+.pp-sub-row td{background:#141a23;color:#9aa5b4;font-weight:600;font-size:.78rem;text-transform:uppercase;}
+.pp-sub-row td.n{color:#e8ecf3;font-size:.87rem;text-transform:none;}
+.pp-total-row td{background:#141a23;font-weight:800;color:#7db8ff;font-size:.95rem;}
+.pp-grand-row td{background:#12325a;color:#fff;font-weight:800;font-size:.95rem;}
+.pp-h2{font-size:1.15rem;margin:2.2rem 0 .2rem;display:flex;align-items:center;gap:.55rem;}
+.pp-pr{font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#2563eb;border-radius:5px;padding:.18rem .5rem;}
+.pp-pr.opt{background:#5c6675;}
+.pp-store{color:#7db8ff;text-decoration:none;}
+.pp-store span{color:#9aa5b4;font-size:.78rem;}
+.pp-store:hover{text-decoration:underline;}
+.pp-pick{color:#9aa5b4;font-size:.83rem;margin:.35rem 0 1rem;}
+.pp-summary{background:#171d27;border:2px solid #2563eb;border-radius:14px;padding:1.1rem 1.3rem;margin:2.4rem 0 1rem;}
+.pp-summary table td{padding:.45rem .2rem;border-bottom:1px solid #222834;}
+.pp-grand td{border-top:2px solid #28303c;font-size:1.12rem;font-weight:800;padding-top:.7rem;color:#fff;}
+.pp-opt td{color:#3ecf8e;font-weight:600;}
+.pp-cta-wrap{position:relative;border-radius:16px;isolation:isolate;margin:1.6rem 0;}
+.pp-cta{display:block;text-align:center;background:linear-gradient(135deg,#1a5fc7,#3b82f6);color:#fff;font-weight:700;border-radius:14px;padding:16px;text-decoration:none;font-size:1.02rem;}
+.pp-cta-wrap::before,.pp-cta-wrap::after{content:"";position:absolute;inset:-2px;z-index:-1;border-radius:16px;background:conic-gradient(from var(--glow-angle),#1a5fc7,#7db8ff,#2563eb,#b7d7ff,#1a5fc7);animation:glow-rotate 3.5s linear infinite;}
+.pp-cta-wrap::after{filter:blur(16px);opacity:.5;}
+.pp-foot{color:#9aa5b4;font-size:.78rem;border-top:1px solid #28303c;padding-top:1rem;margin-top:2rem;line-height:1.55;}
+.pp-chips{margin:.7rem 0;}
+.pp-chips span{display:inline-block;background:#16202e;color:#7db8ff;border-radius:20px;padding:.15rem .6rem;font-size:.7rem;font-weight:600;margin:0 .25rem .25rem 0;}
+.pp-lightbox{position:fixed;inset:0;z-index:100;background:rgba(8,10,14,.96);display:flex;flex-direction:column;touch-action:none;}
+.pp-lb-bar{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.7rem 1rem;color:#e8ecf3;font-weight:600;}
+.pp-lb-hint{color:#9aa5b4;font-size:.72rem;font-weight:400;}
+.pp-lb-bar button{background:#28303c;color:#fff;border:none;border-radius:8px;width:32px;height:32px;font-size:1rem;cursor:pointer;}
+.pp-lb-canvas{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:grab;}
+.pp-lb-canvas img{transform-origin:center center;will-change:transform;user-select:none;}
+@media (prefers-reduced-motion: reduce){.pp-cta-wrap::before,.pp-cta-wrap::after{animation:none;}}
