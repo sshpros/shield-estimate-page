@@ -36,6 +36,9 @@ type Tier = {
   equipment_total: number;
   labor_total: number;
   labor_hours?: number | null;
+  labor_rate?: number | null;
+  labor_tech_count?: number | null;
+  labor_is_flat?: boolean | null;
   dispatch_fee?: number;
   dispatch_discount?: number;
   dispatch_itemized?: boolean;
@@ -91,6 +94,8 @@ type Job = {
   estimated_labor_hours?: number | null;
   estimated_labor_cost?: number | null;
   estimated_labor_rate?: number | null;
+  estimated_labor_tech_count?: number | null;
+  estimated_labor_is_flat?: boolean | null;
   tax_rate?: number | null;
   estimate_discount_amount?: number | null;
   estimate_discount_percent?: number | null;
@@ -100,9 +105,19 @@ type Job = {
   mmr_discount_reason?: string | null;
 };
 
+type LaborInfo = {
+  total: number;
+  hours?: number | null;
+  rate?: number | null;
+  tech_count?: number | null;
+  is_flat?: boolean | null;
+};
+
 type EstimateResponse = {
   estimate: EstimateLink;
   job: Job;
+  /** Shared (non-tiered) labor with the crew math, from the edge function. */
+  labor?: LaborInfo | null;
   line_items?: LineItem[] | null;
   estimate_sections?: { name: string; isReference?: boolean; customerAddable?: boolean }[] | null;
   logo_url?: string | null;
@@ -468,7 +483,7 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, laborHours: null, dispatch: 0, dispatchGross: 0, dispatchDiscount: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
+      return { equipment: 0, labor: 0, laborHours: null, laborRate: null, laborTechs: 1, laborIsFlat: false, dispatch: 0, dispatchGross: 0, dispatchDiscount: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
 
     if (isTiered && activeTier) {
       // Server tier totals already exclude reference sections. When the
@@ -482,6 +497,9 @@ export default function EstimatePage() {
           equipment: activeTier.equipment_total,
           labor: activeTier.labor_total,
           laborHours: activeTier.labor_hours ?? null,
+          laborRate: activeTier.labor_rate ?? null,
+          laborTechs: Math.max(1, Number(activeTier.labor_tech_count ?? 1)),
+          laborIsFlat: activeTier.labor_is_flat === true,
           dispatch: Math.max(0, (activeTier.dispatch_fee ?? data.dispatch_fee ?? 0) - (activeTier.dispatch_discount ?? data.dispatch_discount ?? 0)),
           dispatchGross: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
           dispatchDiscount: Math.min(activeTier.dispatch_discount ?? data.dispatch_discount ?? 0, activeTier.dispatch_fee ?? data.dispatch_fee ?? 0),
@@ -508,6 +526,9 @@ export default function EstimatePage() {
         equipment: activeTier.equipment_total + addedSums.oneTime,
         labor: activeTier.labor_total,
         laborHours: activeTier.labor_hours ?? null,
+        laborRate: activeTier.labor_rate ?? null,
+        laborTechs: Math.max(1, Number(activeTier.labor_tech_count ?? 1)),
+        laborIsFlat: activeTier.labor_is_flat === true,
         dispatch: Math.max(0, (activeTier.dispatch_fee ?? data.dispatch_fee ?? 0) - (activeTier.dispatch_discount ?? data.dispatch_discount ?? 0)),
         dispatchGross: activeTier.dispatch_fee ?? data.dispatch_fee ?? 0,
         dispatchDiscount: Math.min(activeTier.dispatch_discount ?? data.dispatch_discount ?? 0, activeTier.dispatch_fee ?? data.dispatch_fee ?? 0),
@@ -534,9 +555,20 @@ export default function EstimatePage() {
     const mmrDiscount = Math.max(0, Number(data.job.mmr_discount_amount ?? 0));
     const monthly = Math.max(0, rawMonthly - (rawMonthly > 0 ? mmrDiscount : 0));
     const monthlyOriginal = mmrDiscount > 0 && rawMonthly > 0 ? rawMonthly : 0;
-    const labor =
+    // Labor is the SERVER's number (link snapshot, or the job's hours x rate x crew).
+    // This used to recompute hours x rate here with no tech count, so a two-tech
+    // estimate showed one tech's labor and a Subtotal that didn't add up to the
+    // Total beneath it (Cody Jensen, 2026-09-24).
+    const laborTechs = Math.max(1, Number(data.labor?.tech_count ?? data.job.estimated_labor_tech_count ?? 1));
+    const laborIsFlat = (data.labor?.is_flat ?? data.job.estimated_labor_is_flat) === true;
+    const laborHoursVal = Number(data.labor?.hours ?? data.job.estimated_labor_hours ?? 0) || 0;
+    const laborRateVal = Number(data.labor?.rate ?? data.job.estimated_labor_rate ?? 0) || 0;
+    const labor = Number(
+      data.labor?.total ??
+      data.estimate?.labor_total ??
       data.job.estimated_labor_cost ??
-      (data.job.estimated_labor_hours ?? 0) * (data.job.estimated_labor_rate ?? 0);
+      laborHoursVal * laborRateVal * laborTechs
+    ) || 0;
     const dispatchGross = data.dispatch_fee ?? data.estimate?.dispatch_fee ?? 0;
     const dispatchDiscount = Math.min(
       Number(data.dispatch_discount ?? data.estimate?.dispatch_discount ?? 0), dispatchGross);
@@ -579,8 +611,29 @@ export default function EstimatePage() {
     const lineDiscounts = countedItems
       .filter((li) => li.is_recurring !== true)
       .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
-    return { equipment, labor, laborHours: data.job.estimated_labor_hours ?? null, dispatch, dispatchGross, dispatchDiscount, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
+    return { equipment, labor, laborHours: laborIsFlat ? null : (laborHoursVal || null), laborRate: laborIsFlat ? null : (laborRateVal || null), laborTechs, laborIsFlat, dispatch, dispatchGross, dispatchDiscount, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
   }, [data, lineItems, isTiered, activeTier, countedItems, addedSums, addedSet]);
+
+  // How the labor number was built, in the customer's words. Mirrors the PDF
+  // ("Labor (8.0 hrs x 2 techs)" / "Labor (flat rate, 2 techs)").
+  const laborBreakdown = useMemo(() => {
+    const techs = Math.max(1, Number(totals.laborTechs ?? 1));
+    const crew = techs > 1 ? `${techs} technicians` : '1 technician';
+    if (totals.laborIsFlat) return techs > 1 ? `Flat rate · crew of ${techs}` : 'Flat rate';
+    const hrs = Number(totals.laborHours ?? 0);
+    const rate = Number(totals.laborRate ?? 0);
+    const rateStr = Number.isInteger(rate) ? `$${rate}` : fmt(rate);
+    if (hrs > 0 && rate > 0) return `${hrs} hrs × ${crew} × ${rateStr}/hr`;
+    if (hrs > 0) return `${hrs} hrs × ${crew}`;
+    return techs > 1 ? `Crew of ${techs}` : '';
+  }, [totals]);
+  const laborShortLabel = useMemo(() => {
+    const techs = Math.max(1, Number(totals.laborTechs ?? 1));
+    if (totals.laborIsFlat) return techs > 1 ? `flat rate, ${techs} techs` : 'flat rate';
+    const hrs = Number(totals.laborHours ?? 0);
+    if (hrs <= 0) return techs > 1 ? `${techs} techs` : '';
+    return techs > 1 ? `${hrs} hrs × ${techs} techs` : `${hrs} hrs`;
+  }, [totals]);
 
   const depositAmount = useMemo(() => {
     // Percentage deposits scale with the configured total when the customer
@@ -954,6 +1007,47 @@ export default function EstimatePage() {
         )}
       </div>
 
+      {(totals.labor > 0 || totals.dispatch > 0) && (
+        <div className="card">
+          <div className="card-title">{isTiered ? `${activeTier?.label ?? 'Selected'} — Labor & Service` : 'Labor & Service'}</div>
+          {totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch) > 0 && (
+            <div className="service-row">
+              <div className="service-icon" aria-hidden>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                </svg>
+              </div>
+              <div className="service-details">
+                <div className="service-name">Professional installation</div>
+                <div className="service-meta">{laborBreakdown}</div>
+                {!totals.dispatchItemized && totals.dispatch > 0 && (
+                  <div className="service-meta">Includes the trip &amp; service call</div>
+                )}
+              </div>
+              <div className="service-price">{fmt(totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch))}</div>
+            </div>
+          )}
+          {totals.dispatchItemized && totals.dispatch > 0 && (
+            <div className="service-row">
+              <div className="service-icon" aria-hidden>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 17h4V5H2v12h3" /><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1" />
+                  <circle cx="7.5" cy="17.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
+                </svg>
+              </div>
+              <div className="service-details">
+                <div className="service-name">Dispatch</div>
+                <div className="service-meta">Trip &amp; service call — one-time, gets your crew and their tools on site</div>
+              </div>
+              <div className="service-price">
+                {totals.dispatchDiscount > 0 && <s>{fmt(totals.dispatchGross)}</s>}
+                {fmt(totals.dispatch)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {job.estimate_notes && (
         <div className="card">
           <div className="card-title">Notes</div>
@@ -977,7 +1071,7 @@ export default function EstimatePage() {
           <div className="totals-row item labor">
             <span>
               Labor
-              {Number(totals.laborHours) > 0 ? ` (${totals.laborHours} hrs)` : ''}
+              {laborShortLabel ? ` (${laborShortLabel})` : ''}
               {!totals.dispatchItemized && totals.dispatch > 0 ? ' + dispatch' : ''}
             </span>
             <span>{fmt(totals.labor + (totals.dispatchItemized ? 0 : totals.dispatch))}</span>
