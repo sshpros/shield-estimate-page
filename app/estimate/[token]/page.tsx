@@ -284,7 +284,7 @@ export default function EstimatePage() {
                         marginTop: 6,
                         fontSize: 12,
                         fontWeight: 600,
-                        color: '#60a5fa',
+                        color: 'var(--blue)',
                         textDecoration: 'none',
                         border: '1px solid rgba(59,130,246,0.35)',
                         borderRadius: 20,
@@ -331,7 +331,7 @@ export default function EstimatePage() {
                         display: 'inline-block',
                         fontSize: 10,
                         fontWeight: 700,
-                        color: '#60a5fa',
+                        color: 'var(--blue)',
                         background: 'rgba(59,130,246,0.15)',
                         padding: '3px 8px',
                         borderRadius: 20,
@@ -344,16 +344,16 @@ export default function EstimatePage() {
                 </div>
                 <div className="equipment-price">
                   {itemDiscount > 0.005 && (
-                    <div style={{ fontSize: 12, color: '#8b93a7', textDecoration: 'line-through' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', textDecoration: 'line-through' }}>
                       {fmt(grossTotal)}
                     </div>
                   )}
                   <Currency amount={lineTotal} />
                   {item.is_recurring && (
-                    <span style={{ fontSize: 12, color: '#9ca3af' }}>/mo</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>/mo</span>
                   )}
                   {itemDiscount > 0.005 && (
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
                       −{fmt(itemDiscount)}{item.discount_reason ? ` ${item.discount_reason}` : ''}
                     </div>
                   )}
@@ -819,8 +819,8 @@ export default function EstimatePage() {
         }}>
           <span style={{ fontSize: 18 }}>👁</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#c084fc' }}>TECHNICIAN PREVIEW — READ ONLY</div>
-            <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 2 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--violet)' }}>TECHNICIAN PREVIEW — READ ONLY</div>
+            <div style={{ fontSize: 11, color: 'var(--violet)', marginTop: 2 }}>
               You can interact with all flows. No changes will be saved.
             </div>
           </div>
@@ -856,7 +856,7 @@ export default function EstimatePage() {
             }}
           />
         ) : (
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 0.5, color: '#fff' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text)' }}>
             Shield Low Voltage
           </div>
         )}
@@ -937,11 +937,11 @@ export default function EstimatePage() {
       <div className="card">
         <div className="card-title">{isTiered ? `${activeTier?.label ?? 'Selected'} — Equipment` : 'Equipment'}</div>
         {lineItems.length === 0 ? (
-          <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+          <div style={{ color: 'var(--text-3)', padding: '8px 0' }}>
             No equipment listed on this estimate.
           </div>
         ) : displayItems.length === 0 && referenceBlocks.length > 0 ? (
-          <div style={{ color: '#8b93a7', padding: '8px 0' }}>
+          <div style={{ color: 'var(--text-3)', padding: '8px 0' }}>
             All equipment on this estimate is optional — browse the Add-Ons below.
           </div>
         ) : (
@@ -951,7 +951,7 @@ export default function EstimatePage() {
               {header && (() => {
                 // Structural heading, not a chip: full-width, left-aligned,
                 // accent bar keyed to state, hairline rule separating sections.
-                const accent = header.added ? '#22c55e' : header.isReference ? '#d97706' : '#60a5fa';
+                const accent = header.added ? 'var(--green)' : header.isReference ? 'var(--amber)' : 'var(--blue)';
                 const status = header.added
                   ? '✓ Added to your total'
                   : header.isReference
@@ -961,7 +961,7 @@ export default function EstimatePage() {
                   <div
                     style={{
                       marginTop: i === 0 ? 0 : 24, marginBottom: 6,
-                      borderTop: i === 0 ? 'none' : '1px solid #1f2634',
+                      borderTop: i === 0 ? 'none' : '1px solid var(--border)',
                       paddingTop: i === 0 ? 0 : 18,
                     }}
                   >
@@ -969,7 +969,7 @@ export default function EstimatePage() {
                       <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, minWidth: 0 }}>
                         <span style={{ width: 4, borderRadius: 2, background: accent, flexShrink: 0 }} />
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.4, color: '#e5e9f2', textTransform: 'uppercase' }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.4, color: 'var(--text)', textTransform: 'uppercase' }}>
                             {header.name}
                           </div>
                           {status && (
@@ -991,7 +991,7 @@ export default function EstimatePage() {
                           fontSize: 12, fontWeight: 700, cursor: 'pointer',
                           background: header.added ? 'transparent' : 'rgba(34,197,94,0.15)',
                           border: `1px solid ${header.added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`,
-                          color: header.added ? '#8b93a7' : '#22c55e',
+                          color: header.added ? 'var(--text-3)' : 'var(--green)',
                         }}
                       >
                         {header.added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(header.subtotal)}`}
@@ -1062,7 +1062,7 @@ export default function EstimatePage() {
           <span>{fmt(totals.equipment)}</span>
         </div>
         {totals.lineDiscounts > 0.005 && (
-          <div className="totals-row item" style={{ color: '#22c55e' }}>
+          <div className="totals-row item" style={{ color: 'var(--green)' }}>
             <span>Item discounts (already applied)</span>
             <span>−{fmt(totals.lineDiscounts)}</span>
           </div>
@@ -1126,7 +1126,7 @@ export default function EstimatePage() {
           </div>
         )}
         {totals.monthly > 0 && (
-          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
             Recurring service billed monthly — not included in the total above.
           </div>
         )}
@@ -1142,10 +1142,10 @@ export default function EstimatePage() {
               marginTop: 10, padding: '10px 12px', borderRadius: 10,
               background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
             }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: '#22c55e', letterSpacing: 0.3 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--green)', letterSpacing: 0.3 }}>
                 💳 MULTI-PAY AVAILABLE{allZero ? ' — 0% FINANCING' : ''}
               </span>
-              <div style={{ fontSize: 12, color: '#c9d2e3', marginTop: 3 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3 }}>
                 Split into {plans.map((p) => p.months).join(', ')} monthly payments
                 {cheapest ? ` — from ${fmt(cheapest.monthly_amount)}/mo` : ''}.
                 {allZero ? ' No interest or fees.' : ' Financing charges shown per plan.'} Choose a plan when you accept.
@@ -1173,20 +1173,20 @@ export default function EstimatePage() {
       {referenceBlocks.length > 0 && (
         <div className="card">
           <div className="card-title">Optional Add-Ons — Priced for Reference</div>
-          <p style={{ fontSize: 12, color: '#8b93a7', margin: '0 0 4px' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 4px' }}>
             These are not part of your estimate total. Browse pricing and tap Add to include one.
           </p>
           {referenceBlocks.map(({ section, items, subtotal }) => {
             const added = addedSet.has(section.name);
             const addable = addableSectionNames.has(section.name);
-            const accent = added ? '#22c55e' : '#d97706';
+            const accent = added ? 'var(--green)' : 'var(--amber)';
             return (
               <div key={section.name} style={{ marginTop: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, minWidth: 0 }}>
                     <span style={{ width: 4, borderRadius: 2, background: accent, flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.4, color: '#e5e9f2', textTransform: 'uppercase' }}>{section.name}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.4, color: 'var(--text)', textTransform: 'uppercase' }}>{section.name}</div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: accent, marginTop: 2 }}>
                         {added ? '✓ Added to your total' : 'Priced for reference — not included in total'}
                       </div>
@@ -1197,7 +1197,7 @@ export default function EstimatePage() {
                 {addable && !terminal && (
                   <button
                     onClick={() => toggleSection(section.name)}
-                    style={{ marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: added ? 'transparent' : 'rgba(34,197,94,0.15)', border: `1px solid ${added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`, color: added ? '#8b93a7' : '#22c55e' }}
+                    style={{ marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: added ? 'transparent' : 'rgba(34,197,94,0.15)', border: `1px solid ${added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`, color: added ? 'var(--text-3)' : 'var(--green)' }}
                   >
                     {added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(subtotal)}`}
                   </button>
@@ -1237,7 +1237,7 @@ export default function EstimatePage() {
               : '✕'}
           </div>
           <h2 style={{ marginBottom: 8 }}>{estimate.status}</h2>
-          <p style={{ color: '#8b93a7', marginBottom: 0 }}>
+          <p style={{ color: 'var(--text-3)', marginBottom: 0 }}>
             {estimate.status === 'Accepted' && estimate.deposit_required && !estimate.deposit_paid
               ? 'Your estimate has been accepted. Please complete your deposit payment to get started.'
               : estimate.status === 'Accepted'
@@ -1274,7 +1274,7 @@ export default function EstimatePage() {
           </div>
           {addedSet.size > 0 && (
             <div style={{
-              fontSize: 12, fontWeight: 600, color: '#22c55e', marginBottom: 12,
+              fontSize: 12, fontWeight: 600, color: 'var(--green)', marginBottom: 12,
               padding: '8px 12px', borderRadius: 8,
               background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
             }}>
@@ -1286,7 +1286,7 @@ export default function EstimatePage() {
             if (!plans.length) return null;
             return (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#e2e8f0' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text)' }}>
                   How would you like to pay?
                 </div>
                 <button
@@ -1312,7 +1312,7 @@ export default function EstimatePage() {
                       {zeroPct && (
                         <span style={{
                           display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 999,
-                          background: 'rgba(34,197,94,0.15)', color: '#22c55e',
+                          background: 'rgba(34,197,94,0.15)', color: 'var(--green)',
                           fontSize: 11, fontWeight: 800, letterSpacing: 0.3,
                         }}>
                           0% FINANCING
@@ -1337,7 +1337,7 @@ export default function EstimatePage() {
                 penColor="#000"
               />
             ) : (
-              <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>
                 Loading signature pad…
               </div>
             )}
