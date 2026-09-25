@@ -136,7 +136,7 @@ export default function ChangeOrderPage() {
   if (loading) {
     return (
       <div className="container">
-        <div className="card" style={{ textAlign: 'center', padding: 40, color: '#8b93a7' }}>
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>
           Loading change order…
         </div>
       </div>
@@ -148,7 +148,7 @@ export default function ChangeOrderPage() {
       <div className="container">
         <div className="card" style={{ textAlign: 'center', padding: 40 }}>
           <h2 style={{ marginBottom: 8 }}>Something went wrong</h2>
-          <p style={{ color: '#8b93a7' }}>{error}</p>
+          <p style={{ color: 'var(--text-3)' }}>{error}</p>
         </div>
       </div>
     );
@@ -187,10 +187,10 @@ export default function ChangeOrderPage() {
         >
           <span style={{ fontSize: 18 }}>👁</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#c084fc' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--violet)' }}>
               TECHNICIAN PREVIEW — READ ONLY
             </div>
-            <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--violet)', marginTop: 2 }}>
               Responses are disabled in preview mode.
             </div>
           </div>
@@ -222,24 +222,24 @@ export default function ChangeOrderPage() {
         <div className="card-title">What&apos;s Changing</div>
         {co.additions.map((a, i) => (
           <div className="info-row" key={`add-${i}`}>
-            <span style={{ color: '#4ade80' }}>
+            <span style={{ color: 'var(--green)' }}>
               + {a.quantity} × {a.description}
             </span>
-            <span style={{ color: '#4ade80', fontWeight: 600 }}>{fmt(a.total)}</span>
+            <span style={{ color: 'var(--green)', fontWeight: 600 }}>{fmt(a.total)}</span>
           </div>
         ))}
         {inv.line_items
           .filter((li) => li.removed)
           .map((li, i) => (
             <div className="info-row" key={`rem-${i}`}>
-              <span style={{ color: '#f87171', textDecoration: 'line-through' }}>
+              <span style={{ color: 'var(--red)', textDecoration: 'line-through' }}>
                 − {li.quantity} × {li.description}
               </span>
-              <span style={{ color: '#f87171', fontWeight: 600 }}>−{fmt(li.total)}</span>
+              <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{fmt(li.total)}</span>
             </div>
           ))}
         {co.additions.length === 0 && !inv.line_items.some((li) => li.removed) && (
-          <div style={{ color: '#8b93a7', padding: '8px 0' }}>No line-item changes.</div>
+          <div style={{ color: 'var(--text-3)', padding: '8px 0' }}>No line-item changes.</div>
         )}
       </div>
 
@@ -252,7 +252,7 @@ export default function ChangeOrderPage() {
               <span
                 style={
                   li.removed
-                    ? { color: '#6b7280', textDecoration: 'line-through' }
+                    ? { color: 'var(--text-dim)', textDecoration: 'line-through' }
                     : undefined
                 }
               >
@@ -262,7 +262,7 @@ export default function ChangeOrderPage() {
                 className="info-value"
                 style={
                   li.removed
-                    ? { color: '#6b7280', textDecoration: 'line-through', fontWeight: 400 }
+                    ? { color: 'var(--text-dim)', textDecoration: 'line-through', fontWeight: 400 }
                     : undefined
                 }
               >
@@ -272,10 +272,10 @@ export default function ChangeOrderPage() {
           ))}
         {co.additions.map((a, i) => (
           <div className="info-row" key={`new-${i}`}>
-            <span style={{ color: '#4ade80' }}>
+            <span style={{ color: 'var(--green)' }}>
               {a.quantity} × {a.description} <span style={{ fontSize: 11 }}>(new)</span>
             </span>
-            <span className="info-value" style={{ color: '#4ade80' }}>
+            <span className="info-value" style={{ color: 'var(--green)' }}>
               {fmt(a.total)}
             </span>
           </div>
@@ -283,12 +283,12 @@ export default function ChangeOrderPage() {
 
         <div className="info-row" style={{ marginTop: 8 }}>
           <span className="info-label">Current Total</span>
-          <span className="info-value" style={{ textDecoration: 'line-through', color: '#8b93a7' }}>
+          <span className="info-value" style={{ textDecoration: 'line-through', color: 'var(--text-3)' }}>
             {fmt(inv.total_before)}
           </span>
         </div>
         <div className="info-row">
-          <span className="info-label" style={{ fontWeight: 700, color: '#fff' }}>
+          <span className="info-label" style={{ fontWeight: 700, color: 'var(--text)' }}>
             New Total
           </span>
           <span className="info-value" style={{ fontSize: 18, fontWeight: 700 }}>
@@ -299,7 +299,7 @@ export default function ChangeOrderPage() {
           <span className="info-label">Change</span>
           <span
             className="info-value"
-            style={{ color: delta >= 0 ? '#fb923c' : '#4ade80', fontWeight: 700 }}
+            style={{ color: delta >= 0 ? 'var(--orange)' : 'var(--green)', fontWeight: 700 }}
           >
             {delta >= 0 ? '+' : '−'}
             {fmt(Math.abs(delta))}
@@ -315,7 +315,7 @@ export default function ChangeOrderPage() {
           <h2 style={{ marginBottom: 8 }}>
             {resolvedStatus === 'Applied' ? 'Change Order Approved' : `Change Order ${resolvedStatus}`}
           </h2>
-          <p style={{ color: '#8b93a7', marginBottom: 0 }}>
+          <p style={{ color: 'var(--text-3)', marginBottom: 0 }}>
             {resolvedStatus === 'Applied'
               ? 'Your invoice has been updated with the approved changes.'
               : 'No changes were made to your invoice.'}
@@ -334,7 +334,7 @@ export default function ChangeOrderPage() {
         <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
           <div style={{ fontSize: 40, marginBottom: 10 }}>📨</div>
           <h2 style={{ marginBottom: 8 }}>Request Sent</h2>
-          <p style={{ color: '#8b93a7', marginBottom: 0 }}>
+          <p style={{ color: 'var(--text-3)', marginBottom: 0 }}>
             We received your requested changes and will follow up with an updated change order.
           </p>
         </div>
@@ -368,9 +368,9 @@ export default function ChangeOrderPage() {
                   width: '100%',
                   padding: '12px 14px',
                   borderRadius: 10,
-                  border: '1px solid #2d3646',
-                  background: '#0a0d14',
-                  color: '#fff',
+                  border: '1px solid var(--border-strong)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text)',
                   fontSize: 15,
                   marginBottom: 12,
                 }}
@@ -379,11 +379,11 @@ export default function ChangeOrderPage() {
                 {SigCanvas ? (
                   <SigCanvas
                     ref={sigRef}
-                    penColor="#e5e7eb"
+                    penColor="#000"
                     canvasProps={{ className: 'signature-pad' }}
                   />
                 ) : (
-                  <div style={{ padding: 24, textAlign: 'center', color: '#8b93a7' }}>
+                  <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>
                     Loading signature pad…
                   </div>
                 )}
@@ -419,9 +419,9 @@ export default function ChangeOrderPage() {
                   width: '100%',
                   padding: '12px 14px',
                   borderRadius: 10,
-                  border: '1px solid #2d3646',
-                  background: '#0a0d14',
-                  color: '#fff',
+                  border: '1px solid var(--border-strong)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text)',
                   fontSize: 15,
                   marginBottom: 12,
                 }}
@@ -461,9 +461,9 @@ export default function ChangeOrderPage() {
                   width: '100%',
                   padding: '12px 14px',
                   borderRadius: 10,
-                  border: '1px solid #2d3646',
-                  background: '#0a0d14',
-                  color: '#fff',
+                  border: '1px solid var(--border-strong)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text)',
                   fontSize: 15,
                   marginBottom: 12,
                   resize: 'vertical',
@@ -489,7 +489,7 @@ export default function ChangeOrderPage() {
           {error && (
             <div
               className="card"
-              style={{ borderColor: 'rgba(239,68,68,.4)', color: '#f87171', fontSize: 14 }}
+              style={{ borderColor: 'rgba(239,68,68,.4)', color: 'var(--red)', fontSize: 14 }}
             >
               {error}
             </div>
@@ -497,7 +497,7 @@ export default function ChangeOrderPage() {
         </>
       )}
 
-      <p style={{ textAlign: 'center', color: '#4b5563', fontSize: 12, marginTop: 24 }}>
+      <p style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 12, marginTop: 24 }}>
         Questions? Reply to the email this link came from and we&apos;ll get right back to you.
       </p>
     </div>
