@@ -366,7 +366,11 @@ export default function EstimatePage() {
 
   const isTiered = Boolean(data?.is_tiered && data?.tiers?.length);
   const tiers: Tier[] = isTiered ? (data!.tiers ?? []) : [];
-  const activeTier: Tier | null = isTiered ? (tiers[selectedTierIndex] ?? tiers[0] ?? null) : null;
+  // Tiers are keyed by slot index, not position: a two-option estimate can
+  // ship slots [0, 2] when the middle tier was removed.
+  const activeTier: Tier | null = isTiered
+    ? (tiers.find((t) => t.index === selectedTierIndex) ?? tiers[0] ?? null)
+    : null;
 
   const lineItems: LineItem[] = useMemo(() => {
     if (isTiered && activeTier) return activeTier.line_items ?? [];
