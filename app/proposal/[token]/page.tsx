@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { FrontMatter, type FrontMatterData } from './FrontMatter';
 
 const FN = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/get-design-proposal';
 
@@ -25,6 +26,7 @@ type Snapshot = {
   grand: number;
   sheets: { floor: string; url: string; w: number; h: number }[];
   legend: { sys: string; color: string; rows: string[] }[];
+  frontMatter?: FrontMatterData;
 };
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
@@ -138,6 +140,11 @@ export default function ProposalPage() {
           {snap.meta.preparedFor ? <><br />Prepared for <b>{snap.meta.preparedFor}</b></> : null}
           {address ? <><br />{address}</> : null}</div>
       </header>
+
+      {snap.frontMatter && (
+        <FrontMatter data={snap.frontMatter} title={title} preparedFor={snap.meta.preparedFor} address={address} rev={snap.meta.rev}
+          date={new Date(snap.publishedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} />
+      )}
 
       <h1 className="pp-title">{title} — Systems Proposal</h1>
       {snap.meta.subtitle && <p className="pp-sub">{snap.meta.subtitle}</p>}
