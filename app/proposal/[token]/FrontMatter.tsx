@@ -13,6 +13,7 @@ export type FrontMatterData = {
   legendFull: { sys: string; color: string; rows: FrontLegendRow[] }[];
   wallPlates: { label: string; icon: string; color: string; heightIn: number }[];
   displays: { sizes: number[]; centerIn: number };
+  racks?: RackView[];
 };
 
 /// Standard mounting heights to the CENTER of the plate, inches above finished
@@ -204,6 +205,105 @@ export function FrontMatter({ data, title, preparedFor, address, rev, date }: {
       <LegendPage groups={data.legendFull} />
       {data.wallPlates.length > 0 && <WallPlatePage plates={data.wallPlates} />}
       {data.displays.sizes.length > 0 && <DisplayPage displays={data.displays} />}
+      {data.racks && data.racks.length > 0 && <RackPage racks={data.racks} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rack elevations (Kyle 2026-10-06). Front view, 1U = 10 units, 19" = 190.
+
+export type RackViewItem = { id: string; kind: string; label: string; u: number; size_u: number; watts: number };
+export type RackView = {
+  name: string; height_u: number; ups_va: number; notes?: string; items: RackViewItem[];
+  power: { devices: number; poe: number; total: number; upsWatts: number; pct: number | null; usedU: number; freeU: number };
+};
+
+const KIND_STYLE: Record<string, { fill: string; ink: string }> = {
+  device: { fill: "#16233c", ink: "#fff" }, shelf: { fill: "#334155", ink: "#fff" }, patch: { fill: "#e2e8f0", ink: "#16233c" },
+  cable_mgmt: { fill: "#475569", ink: "#e2e8f0" }, blank: { fill: "#f1f5f9", ink: "#94a3b8" }, fan: { fill: "#cbd5e1", ink: "#16233c" },
+  ups: { fill: "#0f3d2e", ink: "#d1fae5" }, pdu: { fill: "#7c2d12", ink: "#ffedd5" }, fiber: { fill: "#0e7490", ink: "#ecfeff" },
+};
+
+export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
+  rack: RackView; selectedId?: string | null;
+  onItemDown?: (id: string, e: React.MouseEvent<SVGGElement>) => void;
+  svgRef?: React.Ref<SVGSVGElement>;
+}) {
+  const U = 10, rail = 18, W = 190 + rail * 2, H = rack.height_u * U;
+  const yTop = (u: number, size: number) => (rack.height_u - (u + size - 1)) * U;
+  return (
+    <svg ref={svgRef} className="fm-svg" viewBox={`-2 -2 ${W + 4} ${H + 4}`} style={{ maxWidth: 420 }} role="img" aria-label={`${rack.name} rack elevation`}>
+      <rect x={0} y={0} width={W} height={H} fill="#0b1220" rx={3} />
+      {Array.from({ length: rack.height_u }, (_, i) => {
+        const u = rack.height_u - i;
+        return (
+          <g key={u}>
+            <rect x={rail} y={i * U} width={190} height={U} fill={i % 2 ? "#141d2e" : "#111827"} />
+            <text x={rail / 2} y={i * U + 7} fontSize={5.5} textAnchor="middle" fill="#64748b">{u}</text>
+            <text x={W - rail / 2} y={i * U + 7} fontSize={5.5} textAnchor="middle" fill="#64748b">{u}</text>
+          </g>
+        );
+      })}
+      {rack.items.map((it) => {
+        const st = KIND_STYLE[it.kind] ?? KIND_STYLE.device;
+        const y = yTop(it.u, it.size_u), h = it.size_u * U;
+        const sel = it.id === selectedId;
+        return (
+          <g key={it.id} onMouseDown={onItemDown ? (e) => onItemDown(it.id, e) : undefined} style={{ cursor: onItemDown ? "grab" : "default" }}>
+            <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1.5} fill={st.fill} stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.6} />
+            {it.kind === "patch" && Array.from({ length: 24 }, (_, k) => (
+              <rect key={k} x={rail + 30 + k * 6.2} y={y + 3.2} width={4.4} height={3.6} rx={0.5} fill="#64748b" />
+            ))}
+            {it.kind === "fan" && [0, 1, 2].map((k) => <circle key={k} cx={rail + 128 + k * 14} cy={y + h / 2} r={3.4} fill="none" stroke="#475569" strokeWidth={0.8} />)}
+            {it.kind === "ups" && <circle cx={rail + 180} cy={y + 5} r={1.6} fill="#34d399" />}
+            <text x={rail + (it.kind === "patch" ? 4 : 7)} y={y + Math.min(h, 10) / 2 + 2.2} fontSize={it.kind === "patch" ? 4.4 : 5.6}
+              fill={it.kind === "patch" ? "#334155" : st.ink} fontWeight={600}>
+              {it.kind === "patch" ? "PATCH" : it.label}
+            </text>
+            {it.watts > 0 && it.kind !== "patch" && (
+              <text x={rail + 184} y={y + Math.min(h, 10) / 2 + 2.2} fontSize={4.6} textAnchor="end" fill={st.ink} opacity={0.75}>{it.watts}W</text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+export function RackPowerTable({ rack }: { rack: RackView }) {
+  const p = rack.power;
+  const tone = p.pct == null ? "#5c6675" : p.pct > 80 ? "#c0392b" : p.pct > 70 ? "#b7791f" : "#0a7d3f";
+  return (
+    <table style={{ fontSize: ".78rem", borderCollapse: "collapse", width: "100%" }}>
+      <tbody>
+        <tr><td>Rack space</td><td style={{ textAlign: "right" }}>{p.usedU}U used · {p.freeU}U free of {rack.height_u}U</td></tr>
+        <tr><td>Equipment load</td><td style={{ textAlign: "right" }}>{p.devices} W</td></tr>
+        {p.poe > 0 && <tr><td>PoE load (cameras, Wi-Fi, keypads)</td><td style={{ textAlign: "right" }}>{p.poe} W</td></tr>}
+        <tr><td><b>Total</b></td><td style={{ textAlign: "right" }}><b>{p.total} W</b></td></tr>
+        {rack.ups_va > 0
+          ? <tr><td>UPS {rack.ups_va} VA (~{p.upsWatts} W)</td><td style={{ textAlign: "right", color: tone, fontWeight: 700 }}>{p.pct}% load</td></tr>
+          : <tr><td colSpan={2} style={{ color: "#5c6675" }}>Surge-protected switched PDU (no UPS)</td></tr>}
+      </tbody>
+    </table>
+  );
+}
+
+export function RackPage({ racks }: { racks: RackView[] }) {
+  return (
+    <div className="fm-page">
+      <Header title="Rack Elevations" kicker="Equipment racks · front view · power budget" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(16rem,1fr))", gap: "1.2rem", alignItems: "start" }}>
+        {racks.map((r) => (
+          <div key={r.name} style={{ breakInside: "avoid" }}>
+            <div style={{ fontWeight: 800, fontSize: ".85rem", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: ".4rem" }}>{r.name} · {r.height_u}U</div>
+            <RackSvg rack={r} />
+            <div style={{ marginTop: ".5rem" }}><RackPowerTable rack={r} /></div>
+            {r.notes ? <p className="fm-note" style={{ marginTop: ".3rem" }}>{r.notes}</p> : null}
+          </div>
+        ))}
+      </div>
+      <p className="fm-note">Network, recording and control equipment run on the UPS for clean shutdown and ride-through; amplifiers run on surge-protected switched outlets. Every rack is labeled, cable-managed and documented in your as-built package.</p>
     </div>
   );
 }
