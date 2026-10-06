@@ -213,10 +213,10 @@ export function FrontMatter({ data, title, preparedFor, address, rev, date }: {
 // ---------------------------------------------------------------------------
 // Rack elevations (Kyle 2026-10-06). Front view, 1U = 10 units, 19" = 190.
 
-export type RackViewItem = { id: string; kind: string; label: string; u: number; size_u: number; watts: number };
+export type RackViewItem = { id: string; kind: string; label: string; u: number; size_u: number; watts: number; ups_off?: boolean };
 export type RackView = {
   name: string; height_u: number; ups_va: number; notes?: string; items: RackViewItem[];
-  power: { devices: number; poe: number; total: number; upsWatts: number; pct: number | null; usedU: number; freeU: number };
+  power: { devices: number; poe: number; total: number; pduOnly?: number; upsLoad?: number; upsWatts: number; pct: number | null; usedU: number; freeU: number };
 };
 
 const KIND_STYLE: Record<string, { fill: string; ink: string }> = {
@@ -281,8 +281,9 @@ export function RackPowerTable({ rack }: { rack: RackView }) {
         <tr><td>Equipment load</td><td style={{ textAlign: "right" }}>{p.devices} W</td></tr>
         {p.poe > 0 && <tr><td>PoE load (cameras, Wi-Fi, keypads)</td><td style={{ textAlign: "right" }}>{p.poe} W</td></tr>}
         <tr><td><b>Total</b></td><td style={{ textAlign: "right" }}><b>{p.total} W</b></td></tr>
+        {rack.ups_va > 0 && (p.pduOnly ?? 0) > 0 && <tr><td style={{ color: "#5c6675" }}>Amplifiers on switched PDU (not on UPS)</td><td style={{ textAlign: "right", color: "#5c6675" }}>−{p.pduOnly} W</td></tr>}
         {rack.ups_va > 0
-          ? <tr><td>UPS {rack.ups_va} VA (~{p.upsWatts} W)</td><td style={{ textAlign: "right", color: tone, fontWeight: 700 }}>{p.pct}% load</td></tr>
+          ? <tr><td>UPS {rack.ups_va} VA (~{p.upsWatts} W){(p.pduOnly ?? 0) > 0 ? ` · ${p.upsLoad} W protected` : ""}</td><td style={{ textAlign: "right", color: tone, fontWeight: 700 }}>{p.pct}% load</td></tr>
           : <tr><td colSpan={2} style={{ color: "#5c6675" }}>Surge-protected switched PDU (no UPS)</td></tr>}
       </tbody>
     </table>
