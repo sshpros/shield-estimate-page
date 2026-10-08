@@ -226,6 +226,10 @@ const KIND_STYLE: Record<string, { fill: string; ink: string }> = {
   ups: { fill: "#0f3d2e", ink: "#d1fae5" }, pdu: { fill: "#7c2d12", ink: "#ffedd5" }, fiber: { fill: "#0e7490", ink: "#ecfeff" },
 };
 
+/// Drawing units per rack U. The 188-unit slot stands for a 17.4" faceplate, so
+/// a 1.75" U is ~19 units — true proportions (Kyle 2026-10-08: was 10, squashed).
+export const RACK_U = 19;
+
 export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
   rack: RackView; selectedId?: string | null;
   onItemDown?: (id: string, e: React.MouseEvent<SVGGElement>) => void;
@@ -233,9 +237,9 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
 }) {
   // Labels sit in a column right of the rack with a leader to each unit, so
   // product photos stay unobstructed.
-  const U = 10, rail = 18, W = 190 + rail * 2, H = rack.height_u * U, LW = 170;
+  const U = RACK_U, rail = 18, W = 190 + rail * 2, H = rack.height_u * U, LW = 170;
   const yTop = (u: number, size: number) => (rack.height_u - (u + size - 1)) * U;
-  const clip = (s: string) => (s.length > 46 ? `${s.slice(0, 45)}…` : s);
+  const clip = (s: string) => (s.length > 44 ? `${s.slice(0, 43)}…` : s);
   return (
     <svg ref={svgRef} className="fm-svg" viewBox={`-2 -2 ${W + LW + 4} ${H + 4}`} style={{ maxWidth: 600 }} role="img" aria-label={`${rack.name} rack elevation`}>
       <rect x={0} y={0} width={W} height={H} fill="#0b1220" rx={3} />
@@ -244,8 +248,8 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
         return (
           <g key={u}>
             <rect x={rail} y={i * U} width={190} height={U} fill={i % 2 ? "#141d2e" : "#111827"} />
-            <text x={rail / 2} y={i * U + 7} fontSize={5.5} textAnchor="middle" fill="#64748b">{u}</text>
-            <text x={W - rail / 2} y={i * U + 7} fontSize={5.5} textAnchor="middle" fill="#64748b">{u}</text>
+            <text x={rail / 2} y={i * U + U / 2 + 2.3} fontSize={6.5} textAnchor="middle" fill="#64748b">{u}</text>
+            <text x={W - rail / 2} y={i * U + U / 2 + 2.3} fontSize={6.5} textAnchor="middle" fill="#64748b">{u}</text>
           </g>
         );
       })}
@@ -273,17 +277,17 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
               <>
                 <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1.5} fill={st.fill} stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.6} />
                 {it.kind === "patch" && Array.from({ length: 24 }, (_, k) => (
-                  <rect key={k} x={rail + 30 + k * 6.2} y={y + 3.2} width={4.4} height={3.6} rx={0.5} fill="#64748b" />
+                  <rect key={k} x={rail + 30 + k * 6.2} y={y + U * 0.3} width={4.4} height={U * 0.4} rx={0.5} fill="#64748b" />
                 ))}
-                {it.kind === "fan" && [0, 1, 2].map((k) => <circle key={k} cx={rail + 128 + k * 14} cy={cy} r={3.4} fill="none" stroke="#475569" strokeWidth={0.8} />)}
-                {it.kind === "ups" && <circle cx={rail + 180} cy={y + 5} r={1.6} fill="#34d399" />}
+                {it.kind === "fan" && [0, 1, 2].map((k) => <circle key={k} cx={rail + 128 + k * 16} cy={cy} r={U * 0.32} fill="none" stroke="#475569" strokeWidth={0.8} />)}
+                {it.kind === "ups" && <circle cx={rail + 180} cy={y + U / 2} r={1.8} fill="#34d399" />}
                 {it.kind !== "patch" && it.kind !== "blank" && (
-                  <text x={rail + 7} y={y + Math.min(h, 10) / 2 + 2.2} fontSize={5.6} fill={st.ink} fontWeight={600}>{clip(it.label)}</text>
+                  <text x={rail + 7} y={cy + 2.4} fontSize={6.4} fill={st.ink} fontWeight={600}>{clip(it.label)}</text>
                 )}
               </>
             )}
             <line x1={W} y1={cy} x2={W + 7} y2={cy} stroke="#94a3b8" strokeWidth={0.5} />
-            <text x={W + 9} y={cy + 2} fontSize={5.6} fill={sel ? "#0284c7" : "#1e293b"} fontWeight={sel ? 700 : 500}>
+            <text x={W + 9} y={cy + 2.2} fontSize={6.4} fill={sel ? "#0284c7" : "#1e293b"} fontWeight={sel ? 700 : 500}>
               {clip(it.label)}
               {it.watts > 0 && <tspan fill="#64748b" fontWeight={400}>{`  ${it.watts}W`}</tspan>}
             </text>
