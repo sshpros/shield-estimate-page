@@ -19,8 +19,10 @@ export type FrontMatterData = {
 /// Standard mounting heights to the CENTER of the plate, inches above finished
 /// floor. Industry defaults (Kyle to confirm his house standard).
 export const WALL_HEIGHTS: Record<string, { label: string; heightIn: number }> = {
-  keypad_control: { label: "Josh.ai Nano / scene keypad", heightIn: 48 },
-  touch_panel: { label: "Touch panel", heightIn: 54 },
+  // Josh voice points are their own device, not keypads or touchscreens (Kyle 2026-10-08).
+  voice_control: { label: "Josh.ai voice control point", heightIn: 48 },
+  keypad_control: { label: "Scene keypad", heightIn: 48 },
+  touch_panel: { label: "Touchscreen", heightIn: 54 },
   security_keypad: { label: "Security keypad", heightIn: 54 },
   doorbell: { label: "Video doorbell", heightIn: 48 },
   door_phone: { label: "Door / gate station", heightIn: 54 },
