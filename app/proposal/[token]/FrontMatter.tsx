@@ -214,7 +214,7 @@ export function FrontMatter({ data, title, preparedFor, address, rev, date }: {
 // Rack elevations (Kyle 2026-10-06). Front view, 1U = 10 units, 19" = 190.
 
 export type RackViewItem = { id: string; kind: string; label: string; u: number; size_u: number; watts: number; ups_off?: boolean;
-  face?: { url: string; ar: number } }; // front-of-unit photo (Kyle 2026-10-08)
+  face?: { url: string; ar: number; ears?: string | null } }; // front-of-unit photo (Kyle 2026-10-08)
 export type RackView = {
   name: string; height_u: number; ups_va: number; notes?: string; items: RackViewItem[];
   power: { devices: number; poe: number; total: number; pduOnly?: number; upsLoad?: number; upsWatts: number; upsName?: string; pct: number | null; usedU: number; freeU: number };
@@ -237,7 +237,23 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
 }) {
   // Labels sit in a column right of the rack with a leader to each unit, so
   // product photos stay unobstructed.
-  const U = RACK_U, rail = 18, W = 190 + rail * 2, H = rack.height_u * U, LW = 170;
+  // Ears: real gear is 19" ear-to-ear over a ~17.75" opening, so every unit's
+  // ears reach EAR units over each rail (Kyle 2026-10-08). Photos that include
+  // their ears span ear-to-ear; bare faceplates get drawn tabs in their color.
+  const U = RACK_U, rail = 24, W = 190 + rail * 2, H = rack.height_u * U, LW = 170, EAR = 7.5;
+  const x0 = rail + 1 - EAR, fullW = 188 + EAR * 2;
+  const earTabs = (y: number, h: number, size: number, color: string, key: string) => (
+    <g key={key}>
+      {[x0, rail + 189].map((x) => (
+        <g key={x}>
+          <rect x={x} y={y + 0.5} width={EAR} height={h - 1} rx={0.8} fill={color} stroke="#0b1220" strokeWidth={0.3} />
+          {Array.from({ length: size }, (_, k) => (
+            <rect key={k} x={x + EAR / 2 - 1.6} y={y + k * U + U / 2 - 1.1} width={3.2} height={2.2} rx={1.1} fill="#0b1220" opacity={0.55} />
+          ))}
+        </g>
+      ))}
+    </g>
+  );
   const yTop = (u: number, size: number) => (rack.height_u - (u + size - 1)) * U;
   const clip = (s: string) => (s.length > 44 ? `${s.slice(0, 43)}…` : s);
   return (
@@ -248,8 +264,8 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
         return (
           <g key={u}>
             <rect x={rail} y={i * U} width={190} height={U} fill={i % 2 ? "#141d2e" : "#111827"} />
-            <text x={rail / 2} y={i * U + U / 2 + 2.3} fontSize={6.5} textAnchor="middle" fill="#64748b">{u}</text>
-            <text x={W - rail / 2} y={i * U + U / 2 + 2.3} fontSize={6.5} textAnchor="middle" fill="#64748b">{u}</text>
+            <text x={(rail - EAR) / 2} y={i * U + U / 2 + 2.3} fontSize={6.5} textAnchor="middle" fill="#64748b">{u}</text>
+            <text x={W - (rail - EAR) / 2} y={i * U + U / 2 + 2.3} fontSize={6.5} textAnchor="middle" fill="#64748b">{u}</text>
           </g>
         );
       })}
@@ -262,20 +278,27 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
         // fills the slot; anything else (half-width units) keeps its proportions.
         // On a shelf the unit always keeps its proportions, sitting on the shelf lip.
         const onShelf = it.kind === "shelf";
-        const fill = !onShelf && it.face && Math.abs(Math.log(it.face.ar / (10.1 / it.size_u))) < 0.12;
+        const earsInPhoto = it.face?.ears === "image";
+        // Photos that include their ears always span ear-to-ear (the ears sit on the rails).
+        const fill = earsInPhoto || (!onShelf && it.face && Math.abs(Math.log(it.face.ar / (10.1 / it.size_u))) < 0.12);
         return (
           <g key={it.id} onMouseDown={onItemDown ? (e) => onItemDown(it.id, e) : undefined} style={{ cursor: onItemDown ? "grab" : "default" }}>
             <title>{it.label}</title>
             {it.face ? (
-              <>
-                <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} fill="#0b1220" />
-                <image href={it.face.url} x={rail + 1} y={y + 0.5} width={188} height={h - (onShelf ? 2.5 : 1)} preserveAspectRatio={fill ? "none" : onShelf ? "xMidYMax meet" : "xMidYMid meet"} />
-                {onShelf && <rect x={rail + 1} y={y + h - 2} width={188} height={1.5} fill="#64748b" />}
-                <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1} fill="none" stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.4} />
-              </>
+              earsInPhoto ? (
+                <image href={it.face.url} x={x0} y={y + 0.5} width={fullW} height={h - 1} preserveAspectRatio={fill ? "none" : "xMidYMid meet"} />
+              ) : (
+                <>
+                  <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} fill="#0b1220" />
+                  {earTabs(y, h, it.size_u, onShelf ? st.fill : it.face.ears ?? "#9ca3af", "ears")}
+                  <image href={it.face.url} x={rail + 1} y={y + 0.5} width={188} height={h - (onShelf ? 2.5 : 1)} preserveAspectRatio={fill ? "none" : onShelf ? "xMidYMax meet" : "xMidYMid meet"} />
+                  {onShelf && <rect x={rail + 1} y={y + h - 2} width={188} height={1.5} fill="#64748b" />}
+                </>
+              )
             ) : (
               <>
-                <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1.5} fill={st.fill} stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.6} />
+                <rect x={x0} y={y + 0.5} width={fullW} height={h - 1} rx={1.5} fill={st.fill} stroke="#0b1220" strokeWidth={0.6} />
+                {earTabs(y, h, it.size_u, st.fill, "ears")}
                 {it.kind === "patch" && Array.from({ length: 24 }, (_, k) => (
                   <rect key={k} x={rail + 30 + k * 6.2} y={y + U * 0.3} width={4.4} height={U * 0.4} rx={0.5} fill="#64748b" />
                 ))}
@@ -286,6 +309,7 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
                 )}
               </>
             )}
+            {sel && <rect x={x0} y={y + 0.5} width={fullW} height={h - 1} rx={1.5} fill="none" stroke="#38bdf8" strokeWidth={1.6} />}
             <line x1={W} y1={cy} x2={W + 7} y2={cy} stroke="#94a3b8" strokeWidth={0.5} />
             <text x={W + 9} y={cy + 2.2} fontSize={6.4} fill={sel ? "#0284c7" : "#1e293b"} fontWeight={sel ? 700 : 500}>
               {clip(it.label)}
