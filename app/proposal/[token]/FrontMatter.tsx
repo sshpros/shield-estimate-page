@@ -222,7 +222,7 @@ export type RackView = {
 
 const KIND_STYLE: Record<string, { fill: string; ink: string }> = {
   device: { fill: "#16233c", ink: "#fff" }, shelf: { fill: "#334155", ink: "#fff" }, patch: { fill: "#e2e8f0", ink: "#16233c" },
-  cable_mgmt: { fill: "#475569", ink: "#e2e8f0" }, blank: { fill: "#f1f5f9", ink: "#94a3b8" }, fan: { fill: "#cbd5e1", ink: "#16233c" },
+  cable_mgmt: { fill: "#475569", ink: "#e2e8f0" }, blank: { fill: "#f1f5f9", ink: "#94a3b8" }, brush: { fill: "#d6d8db", ink: "#16233c" }, fan: { fill: "#cbd5e1", ink: "#16233c" },
   ups: { fill: "#0f3d2e", ink: "#d1fae5" }, pdu: { fill: "#7c2d12", ink: "#ffedd5" }, fiber: { fill: "#0e7490", ink: "#ecfeff" },
 };
 
@@ -247,8 +247,9 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
       {[x0, rail + 189].map((x) => (
         <g key={x}>
           <rect x={x} y={y + 0.5} width={EAR} height={h - 1} rx={0.8} fill={color} stroke="#0b1220" strokeWidth={0.3} />
-          {Array.from({ length: size }, (_, k) => (
-            <rect key={k} x={x + EAR / 2 - 1.6} y={y + k * U + U / 2 - 1.1} width={3.2} height={2.2} rx={1.1} fill="#0b1220" opacity={0.55} />
+          {/* Two slots per U, near its top and bottom — like real rack ears. */}
+          {Array.from({ length: size * 2 }, (_, k) => (
+            <rect key={k} x={x + EAR / 2 - 2} y={y + Math.floor(k / 2) * U + (k % 2 ? U * 0.8 : U * 0.2) - 1.3} width={4} height={2.6} rx={1.3} fill="#0b1220" opacity={0.8} />
           ))}
         </g>
       ))}
