@@ -213,7 +213,8 @@ export function FrontMatter({ data, title, preparedFor, address, rev, date }: {
 // ---------------------------------------------------------------------------
 // Rack elevations (Kyle 2026-10-06). Front view, 1U = 10 units, 19" = 190.
 
-export type RackViewItem = { id: string; kind: string; label: string; u: number; size_u: number; watts: number; ups_off?: boolean };
+export type RackViewItem = { id: string; kind: string; label: string; u: number; size_u: number; watts: number; ups_off?: boolean;
+  face?: { url: string; ar: number } }; // front-of-unit photo (Kyle 2026-10-08)
 export type RackView = {
   name: string; height_u: number; ups_va: number; notes?: string; items: RackViewItem[];
   power: { devices: number; poe: number; total: number; pduOnly?: number; upsLoad?: number; upsWatts: number; upsName?: string; pct: number | null; usedU: number; freeU: number };
@@ -230,10 +231,13 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
   onItemDown?: (id: string, e: React.MouseEvent<SVGGElement>) => void;
   svgRef?: React.Ref<SVGSVGElement>;
 }) {
-  const U = 10, rail = 18, W = 190 + rail * 2, H = rack.height_u * U;
+  // Labels sit in a column right of the rack with a leader to each unit, so
+  // product photos stay unobstructed.
+  const U = 10, rail = 18, W = 190 + rail * 2, H = rack.height_u * U, LW = 170;
   const yTop = (u: number, size: number) => (rack.height_u - (u + size - 1)) * U;
+  const clip = (s: string) => (s.length > 46 ? `${s.slice(0, 45)}…` : s);
   return (
-    <svg ref={svgRef} className="fm-svg" viewBox={`-2 -2 ${W + 4} ${H + 4}`} style={{ maxWidth: 420 }} role="img" aria-label={`${rack.name} rack elevation`}>
+    <svg ref={svgRef} className="fm-svg" viewBox={`-2 -2 ${W + LW + 4} ${H + 4}`} style={{ maxWidth: 600 }} role="img" aria-label={`${rack.name} rack elevation`}>
       <rect x={0} y={0} width={W} height={H} fill="#0b1220" rx={3} />
       {Array.from({ length: rack.height_u }, (_, i) => {
         const u = rack.height_u - i;
@@ -249,21 +253,40 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
         const st = KIND_STYLE[it.kind] ?? KIND_STYLE.device;
         const y = yTop(it.u, it.size_u), h = it.size_u * U;
         const sel = it.id === selectedId;
+        const cy = y + h / 2;
+        // A photo whose shape is within ~12% of a true faceplate (17.4" × 1.72" per U)
+        // fills the slot; anything else (half-width units) keeps its proportions.
+        // On a shelf the unit always keeps its proportions, sitting on the shelf lip.
+        const onShelf = it.kind === "shelf";
+        const fill = !onShelf && it.face && Math.abs(Math.log(it.face.ar / (10.1 / it.size_u))) < 0.12;
         return (
           <g key={it.id} onMouseDown={onItemDown ? (e) => onItemDown(it.id, e) : undefined} style={{ cursor: onItemDown ? "grab" : "default" }}>
-            <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1.5} fill={st.fill} stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.6} />
-            {it.kind === "patch" && Array.from({ length: 24 }, (_, k) => (
-              <rect key={k} x={rail + 30 + k * 6.2} y={y + 3.2} width={4.4} height={3.6} rx={0.5} fill="#64748b" />
-            ))}
-            {it.kind === "fan" && [0, 1, 2].map((k) => <circle key={k} cx={rail + 128 + k * 14} cy={y + h / 2} r={3.4} fill="none" stroke="#475569" strokeWidth={0.8} />)}
-            {it.kind === "ups" && <circle cx={rail + 180} cy={y + 5} r={1.6} fill="#34d399" />}
-            <text x={rail + (it.kind === "patch" ? 4 : 7)} y={y + Math.min(h, 10) / 2 + 2.2} fontSize={it.kind === "patch" ? 4.4 : 5.6}
-              fill={it.kind === "patch" ? "#334155" : st.ink} fontWeight={600}>
-              {it.kind === "patch" ? "PATCH" : it.label}
-            </text>
-            {it.watts > 0 && it.kind !== "patch" && (
-              <text x={rail + 184} y={y + Math.min(h, 10) / 2 + 2.2} fontSize={4.6} textAnchor="end" fill={st.ink} opacity={0.75}>{it.watts}W</text>
+            <title>{it.label}</title>
+            {it.face ? (
+              <>
+                <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} fill="#0b1220" />
+                <image href={it.face.url} x={rail + 1} y={y + 0.5} width={188} height={h - (onShelf ? 2.5 : 1)} preserveAspectRatio={fill ? "none" : onShelf ? "xMidYMax meet" : "xMidYMid meet"} />
+                {onShelf && <rect x={rail + 1} y={y + h - 2} width={188} height={1.5} fill="#64748b" />}
+                <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1} fill="none" stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.4} />
+              </>
+            ) : (
+              <>
+                <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} rx={1.5} fill={st.fill} stroke={sel ? "#38bdf8" : "#0b1220"} strokeWidth={sel ? 1.6 : 0.6} />
+                {it.kind === "patch" && Array.from({ length: 24 }, (_, k) => (
+                  <rect key={k} x={rail + 30 + k * 6.2} y={y + 3.2} width={4.4} height={3.6} rx={0.5} fill="#64748b" />
+                ))}
+                {it.kind === "fan" && [0, 1, 2].map((k) => <circle key={k} cx={rail + 128 + k * 14} cy={cy} r={3.4} fill="none" stroke="#475569" strokeWidth={0.8} />)}
+                {it.kind === "ups" && <circle cx={rail + 180} cy={y + 5} r={1.6} fill="#34d399" />}
+                {it.kind !== "patch" && it.kind !== "blank" && (
+                  <text x={rail + 7} y={y + Math.min(h, 10) / 2 + 2.2} fontSize={5.6} fill={st.ink} fontWeight={600}>{clip(it.label)}</text>
+                )}
+              </>
             )}
+            <line x1={W} y1={cy} x2={W + 7} y2={cy} stroke="#94a3b8" strokeWidth={0.5} />
+            <text x={W + 9} y={cy + 2} fontSize={5.6} fill={sel ? "#0284c7" : "#1e293b"} fontWeight={sel ? 700 : 500}>
+              {clip(it.label)}
+              {it.watts > 0 && <tspan fill="#64748b" fontWeight={400}>{`  ${it.watts}W`}</tspan>}
+            </text>
           </g>
         );
       })}
@@ -294,7 +317,7 @@ export function RackPage({ racks }: { racks: RackView[] }) {
   return (
     <div className="fm-page">
       <Header title="Rack Elevations" kicker="Equipment racks · front view · power budget" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(16rem,1fr))", gap: "1.2rem", alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(22rem,1fr))", gap: "1.2rem", alignItems: "start" }}>
         {racks.map((r) => (
           <div key={r.name} style={{ breakInside: "avoid" }}>
             <div style={{ fontWeight: 800, fontSize: ".85rem", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: ".4rem" }}>{r.name} · {r.height_u}U</div>
