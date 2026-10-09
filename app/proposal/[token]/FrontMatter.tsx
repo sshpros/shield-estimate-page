@@ -55,7 +55,21 @@ const CSS = `
 .fm-row .wr{font-size:.72rem;color:#5c6675;line-height:1.25;}
 .fm-note{font-size:.78rem;color:#5c6675;margin-top:.8rem;line-height:1.45;}
 .fm-svg{width:100%;height:auto;display:block;}
-@media print{.fm-page{border:none;padding:0;margin:0;}}
+.fm-racks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(26rem,100%),1fr));gap:1.2rem;align-items:start;}
+.fm-rack{break-inside:avoid;}
+.fm-print-only{display:none;}
+/* Print (Kyle 2026-10-08): cover, legend, elevations and drawings go
+   landscape; each rack gets its own portrait page, drawn as tall as fits. */
+@page wide{size:letter landscape;margin:.4in;}
+@media print{
+  .fm-page{border:none;padding:0;margin:0;}
+  .fm-wide{page:wide;}
+  .fm-cover img{max-height:4.6in;}
+  .fm-racks{display:block;}
+  .fm-rack + .fm-rack{break-before:page;}
+  .fm-print-only{display:block;}
+  .fm-rack .fm-svg{max-width:100% !important;max-height:7.6in;}
+}
 `;
 
 function Header({ title, kicker }: { title: string; kicker: string }) {
@@ -66,7 +80,7 @@ export function CoverPage({ cover, title, preparedFor, address, rev, date }: {
   cover: FrontMatterData["cover"]; title: string; preparedFor: string; address: string; rev: string; date: string;
 }) {
   return (
-    <div className="fm-page fm-cover" style={{ breakBefore: "auto" }}>
+    <div className="fm-page fm-cover fm-wide" style={{ breakBefore: "auto" }}>
       <style>{CSS}</style>
       {cover ? <img src={cover.url} alt="Home rendering" /> : <div className="fm-ph">Cover image — choose one in the proposal editor</div>}
       <h1>{title}</h1>
@@ -81,7 +95,7 @@ export function CoverPage({ cover, title, preparedFor, address, rev, date }: {
 
 export function LegendPage({ groups }: { groups: FrontMatterData["legendFull"] }) {
   return (
-    <div className="fm-page">
+    <div className="fm-page fm-wide">
       <Header title="Symbol Legend" kicker="All symbols · infrastructure / wire" />
       <div className="fm-legend">
         {groups.map((g) => (
@@ -119,7 +133,7 @@ export function WallPlatePage({ plates }: { plates: FrontMatterData["wallPlates"
     return lines;
   };
   return (
-    <div className="fm-page">
+    <div className="fm-page fm-wide">
       <Header title="Wall-Plate Elevation" kicker="Standard mounting heights · center of plate, A.F.F." />
       <svg className="fm-svg" viewBox={`0 0 ${W} ${H + 16}`} role="img" aria-label="Wall plate mounting heights">
         <rect x={0} y={0} width={W} height={H} fill="#fbfcfd" />
@@ -166,7 +180,7 @@ export function DisplayPage({ displays }: { displays: FrontMatterData["displays"
   const yOf = (inch: number) => H - inch;
   let x = personW + 10;
   return (
-    <div className="fm-page">
+    <div className="fm-page fm-wide">
       <Header title="Display Elevation" kicker={`Displays to scale · ${C}" to center A.F.F.`} />
       <svg className="fm-svg" viewBox={`0 0 ${W} ${H + 12}`} role="img" aria-label="Display sizes and mounting height">
         <rect x={0} y={0} width={W} height={H} fill="#fbfcfd" />
@@ -232,8 +246,10 @@ const KIND_STYLE: Record<string, { fill: string; ink: string }> = {
 /// a 1.75" U is ~19 units — true proportions (Kyle 2026-10-08: was 10, squashed).
 export const RACK_U = 19;
 
-export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
+export function RackSvg({ rack, selectedId, onItemDown, svgRef, large }: {
   rack: RackView; selectedId?: string | null;
+  /// Client-facing size: wider label column, bigger type (proposal pages).
+  large?: boolean;
   onItemDown?: (id: string, e: React.MouseEvent<SVGGElement>) => void;
   svgRef?: React.Ref<SVGSVGElement>;
 }) {
@@ -242,7 +258,8 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
   // Ears: real gear is 19" ear-to-ear over a ~17.75" opening, so every unit's
   // ears reach EAR units over each rail (Kyle 2026-10-08). Photos that include
   // their ears span ear-to-ear; bare faceplates get drawn tabs in their color.
-  const U = RACK_U, rail = 24, W = 190 + rail * 2, H = rack.height_u * U, LW = 170, EAR = 7.5;
+  const U = RACK_U, rail = 24, W = 190 + rail * 2, H = rack.height_u * U, LW = large ? 300 : 170, EAR = 7.5;
+  const LF = large ? 10.5 : 6.4;   // label font, drawing units
   const x0 = rail + 1 - EAR, fullW = 188 + EAR * 2;
   const earTabs = (y: number, h: number, size: number, color: string, key: string) => (
     <g key={key}>
@@ -258,9 +275,10 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
     </g>
   );
   const yTop = (u: number, size: number) => (rack.height_u - (u + size - 1)) * U;
-  const clip = (s: string) => (s.length > 44 ? `${s.slice(0, 43)}…` : s);
+  const CLIP = large ? 64 : 44;
+  const clip = (s: string) => (s.length > CLIP ? `${s.slice(0, CLIP - 1)}…` : s);
   return (
-    <svg ref={svgRef} className="fm-svg" viewBox={`-2 -2 ${W + LW + 4} ${H + 4}`} style={{ maxWidth: 600 }} role="img" aria-label={`${rack.name} rack elevation`}>
+    <svg ref={svgRef} className="fm-svg" viewBox={`-2 -2 ${W + LW + 4} ${H + 4}`} style={{ maxWidth: large ? 720 : 600 }} role="img" aria-label={`${rack.name} rack elevation`}>
       <rect x={0} y={0} width={W} height={H} fill="#0b1220" rx={3} />
       {Array.from({ length: rack.height_u }, (_, i) => {
         const u = rack.height_u - i;
@@ -314,7 +332,7 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef }: {
             )}
             {sel && <rect x={x0} y={y + 0.5} width={fullW} height={h - 1} rx={1.5} fill="none" stroke="#38bdf8" strokeWidth={1.6} />}
             <line x1={W} y1={cy} x2={W + 7} y2={cy} stroke="#94a3b8" strokeWidth={0.5} />
-            <text x={W + 9} y={cy + 2.2} fontSize={6.4} fill={sel ? "#0284c7" : "#1e293b"} fontWeight={sel ? 700 : 500}>
+            <text x={W + 9} y={cy + LF * 0.35} fontSize={LF} fill={sel ? "#0284c7" : "#1e293b"} fontWeight={sel ? 700 : 500}>
               {clip(it.label)}
               {it.watts > 0 && <tspan fill="#64748b" fontWeight={400}>{`  ${it.watts}W`}</tspan>}
             </text>
@@ -348,11 +366,13 @@ export function RackPage({ racks }: { racks: RackView[] }) {
   return (
     <div className="fm-page">
       <Header title="Rack Elevations" kicker="Equipment racks · front view · power budget" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(22rem,1fr))", gap: "1.2rem", alignItems: "start" }}>
-        {racks.map((r) => (
-          <div key={r.name} style={{ breakInside: "avoid" }}>
+      <div className="fm-racks">
+        {racks.map((r, i) => (
+          <div key={r.name} className="fm-rack">
+            {/* Printed: one rack per page, so later racks repeat the header. */}
+            {i > 0 && <div className="fm-print-only"><Header title="Rack Elevations" kicker="Equipment racks · front view · power budget" /></div>}
             <div style={{ fontWeight: 800, fontSize: ".85rem", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: ".4rem" }}>{r.name} · {r.height_u}U</div>
-            <RackSvg rack={r} />
+            <RackSvg rack={r} large />
             <div style={{ marginTop: ".5rem" }}><RackPowerTable rack={r} /></div>
             {r.notes ? <p className="fm-note" style={{ marginTop: ".3rem" }}>{r.notes}</p> : null}
           </div>
