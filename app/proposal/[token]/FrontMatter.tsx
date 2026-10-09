@@ -68,7 +68,10 @@ const CSS = `
 @media print{
   .fm-page{border:none;padding:0;margin:0;}
   .fm-cover img{max-height:4.3in;}
-  .fm-legend{grid-template-columns:repeat(4,1fr);gap:.6rem;}
+  /* Flowing columns: short groups fill in beside tall ones, so the whole
+     legend lands on one landscape page. */
+  .fm-legend{display:block;columns:4;column-gap:.6rem;}
+  .fm-legend .fm-sys{margin-bottom:.6rem;}
   .fm-elev{border:none;padding:0;margin:0;}
   .fm-elev .fm-svg{max-height:2.45in;}
   .fm-elev .fm-note{margin-top:.3rem;}
