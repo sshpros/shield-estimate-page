@@ -48,6 +48,7 @@ function SheetLightbox({ sheets, index, onIndex, onClose }: {
   sheets: Sheet[]; index: number; onIndex: (i: number) => void; onClose: () => void;
 }) {
   const sheet = sheets[index];
+  const root = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const view = useRef<View>({ x: 0, y: 0, s: 1 });
@@ -117,6 +118,27 @@ function SheetLightbox({ sheets, index, onIndex, onClose }: {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [fit, fitS, set]);
+  // The page may already be pinch-zoomed when the viewer opens (the client
+  // pinched the thumbnail first). A fixed overlay then sits in the layout
+  // viewport, mostly off-screen, and since the viewer claims every pinch the
+  // page could never be pinched back out — stuck. So while the page is
+  // zoomed the viewer covers exactly what is on screen, and pinches go to
+  // the browser (see pageZoomed below) until the page is back at 100%.
+  useEffect(() => {
+    const vv = window.visualViewport, el = root.current;
+    if (!vv || !el) return;
+    const sync = () => {
+      const zoomed = vv.scale > 1.001;
+      Object.assign(el.style, zoomed
+        ? { inset: 'auto', left: `${vv.offsetLeft}px`, top: `${vv.offsetTop}px`, width: `${vv.width}px`, height: `${vv.height}px`, touchAction: 'pinch-zoom' }
+        : { inset: '', left: '', top: '', width: '', height: '', touchAction: '' });
+      if (view.current.s <= fitS() * 1.01) fit(false); else set(view.current);
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => { vv.removeEventListener('resize', sync); vv.removeEventListener('scroll', sync); };
+  }, [fit, fitS, set]);
   // Warm the neighbors once this sheet is sharp, so ← → are instant.
   useEffect(() => {
     if (!full) return;
@@ -151,7 +173,11 @@ function SheetLightbox({ sheets, index, onIndex, onClose }: {
   useEffect(() => {
     const el = wrap.current!;
     let mode: 'pan' | 'zoom' = 'zoom', lastWheel = 0;
+    const pageZoomed = () => (window.visualViewport?.scale ?? 1) > 1.001;
     const onWheel = (e: WheelEvent) => {
+      // Page still pinch-zoomed: let the browser have the pinch so it can
+      // zoom the page back out. The drawing takes over once it is at 100%.
+      if ((e.ctrlKey || e.metaKey) && pageZoomed()) return;
       e.preventDefault();
       stopAnim();
       const r = el.getBoundingClientRect();
@@ -178,8 +204,14 @@ function SheetLightbox({ sheets, index, onIndex, onClose }: {
     };
     // Safari reports trackpad pinch as gesture events, not wheel.
     let g0 = 1;
-    const onGestureStart = (e: Event) => { e.preventDefault(); g0 = view.current.s; };
+    let pagePinch = false;
+    const onGestureStart = (e: Event) => {
+      pagePinch = pageZoomed();
+      if (pagePinch) return;
+      e.preventDefault(); g0 = view.current.s;
+    };
     const onGestureChange = (e: Event) => {
+      if (pagePinch) return;
       e.preventDefault();
       const ge = e as Event & { scale: number; clientX: number; clientY: number };
       const r = el.getBoundingClientRect();
@@ -210,7 +242,7 @@ function SheetLightbox({ sheets, index, onIndex, onClose }: {
 
   const prev = index > 0, next = index < sheets.length - 1;
   return (
-    <div className="pp-lightbox" role="dialog" aria-label={`${sheet.floor} drawing`}>
+    <div ref={root} className="pp-lightbox" role="dialog" aria-label={`${sheet.floor} drawing`}>
       <div className="pp-lb-bar">
         <span className="pp-lb-title">{sheet.floor}<em>{index + 1} / {sheets.length}</em></span>
         <span className="pp-lb-hint">Scroll or pinch to zoom · drag to move · double-click to zoom in · ← → for other sheets</span>
