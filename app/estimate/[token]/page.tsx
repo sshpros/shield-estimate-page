@@ -485,6 +485,17 @@ export default function EstimatePage() {
     [data]
   );
 
+  // The monthly charge is almost always alarm monitoring (23 of 26 estimates
+  // with RMR on 2026-10-12), so name it that when the estimate has alarm gear.
+  // Line-item categories are missing from link snapshots, so match on names
+  // and section names. Anything else keeps the generic label.
+  const monthlyLabel = useMemo(() => {
+    const alarm = /alarm|monitoring|qolsys|\biq (pro|panel|remote)\b|powerg|security panel/i;
+    return lineItems.some((li) => alarm.test(`${li.name ?? ''} ${li.section_name ?? ''}`))
+      ? 'Alarm Monitoring'
+      : 'Monthly Service';
+  }, [lineItems]);
+
   const totals = useMemo(() => {
     if (!data)
       return { equipment: 0, labor: 0, laborHours: null, laborRate: null, laborTechs: 1, laborIsFlat: false, dispatch: 0, dispatchGross: 0, dispatchDiscount: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
@@ -1118,7 +1129,7 @@ export default function EstimatePage() {
         </div>
         {totals.monthly > 0 && (
           <div className="totals-row monthly">
-            <span>↻ Monthly Service</span>
+            <span>↻ {monthlyLabel}</span>
             <span>
               {totals.monthlyOriginal > totals.monthly + 0.005 && (
                 <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: 8, fontWeight: 400 }}>
