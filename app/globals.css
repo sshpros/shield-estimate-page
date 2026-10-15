@@ -243,6 +243,20 @@ input, textarea { font-family: inherit; }
 .pp-summary table td{padding:.45rem .2rem;border-bottom:1px solid var(--border-soft);}
 .pp-grand td{border-top:2px solid var(--border-strong);font-size:1.12rem;font-weight:800;padding-top:.7rem;color:var(--text);}
 .pp-opt td{color:var(--green);font-weight:600;}
+/* Approve & sign + add/remove optional sections (2026-10-14) */
+.pp-add{display:inline-block;margin:.2rem 0 1rem;padding:.55rem .95rem;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-weight:700;font-size:.9rem;cursor:pointer;}
+.pp-add.is-on{background:var(--green);border-color:var(--green);color:#fff;}
+.pp-added td{color:var(--text);font-weight:600;}
+.pp-tag{display:inline-block;margin-left:.4rem;padding:.05rem .45rem;border-radius:999px;background:var(--green);color:#fff;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle;}
+.pp-link{margin-left:.6rem;background:none;border:0;padding:0;color:var(--accent);font-weight:600;font-size:.8rem;text-decoration:underline;cursor:pointer;}
+.pp-approve{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:1.1rem 1.3rem;margin:1.6rem 0;}
+.pp-approve-total{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;font-size:1rem;margin:.2rem 0 .6rem;}
+.pp-approve-total b{font-size:1.4rem;}
+.pp-approve-btn{display:block;width:100%;padding:15px;border:0;border-radius:12px;background:var(--green);color:#fff;font-weight:800;font-size:1.02rem;cursor:pointer;}
+.pp-approve-btn:disabled{opacity:.6;cursor:default;}
+.pp-sign-err{color:#dc2626;font-size:.88rem;font-weight:600;margin:0 0 .6rem;}
+.pp-approved{font-size:.98rem;line-height:1.5;}
+.pp-approved-h{color:var(--green);font-weight:800;font-size:1.25rem;margin-bottom:.3rem;}
 .pp-cta-wrap{position:relative;border-radius:16px;isolation:isolate;margin:1.6rem 0;}
 .pp-cta{display:block;text-align:center;background:linear-gradient(135deg,#1a5fc7,#3b82f6);color:var(--text);font-weight:700;border-radius:14px;padding:16px;text-decoration:none;font-size:1.02rem;}
 .pp-cta-wrap::before,.pp-cta-wrap::after{content:"";position:absolute;inset:-2px;z-index:-1;border-radius:16px;background:conic-gradient(from var(--glow-angle),#1a5fc7,var(--blue),var(--accent),#b7d7ff,#1a5fc7);animation:glow-rotate 3.5s linear infinite;}
