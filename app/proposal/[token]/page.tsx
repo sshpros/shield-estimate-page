@@ -21,6 +21,8 @@ type Section = {
   title: string; priority: string; note: string; pick: string;
   installLabel: string; installAmount: number; totalLabel: string;
   itemsTotal: number; total: number; optional: boolean; items: Item[];
+  /// Optional sections sharing a choice group are alternatives — at most one.
+  choice?: string | null;
 };
 type Snapshot = {
   publishedAt: string;
@@ -352,7 +354,10 @@ export default function ProposalPage() {
 
   const toggle = (t: string) => {
     if (approval) return;
-    setAdded((a) => (a.includes(t) ? a.filter((x) => x !== t) : [...a, t]));
+    // Adding one of a choice group swaps out its alternative.
+    const choice = snap?.sections.find((s) => s.title === t)?.choice;
+    const rivals = choice ? snap!.sections.filter((s) => s.choice === choice && s.title !== t).map((s) => s.title) : [];
+    setAdded((a) => (a.includes(t) ? a.filter((x) => x !== t) : [...a.filter((x) => !rivals.includes(x)), t]));
   };
 
   const approve = async () => {
@@ -479,9 +484,15 @@ export default function ProposalPage() {
             </tbody>
           </table></div>
           {s.pick && <p className="pp-pick">{s.pick}</p>}
+          {s.optional && s.choice && (
+            <p className="pp-pick">Choose one: {snap.sections.filter((o) => o.optional && o.choice === s.choice).map((o) => o.title).join(' or ')}.</p>
+          )}
           {s.optional && !approval && (
             <button className={'pp-add' + (added.includes(s.title) ? ' is-on' : '')} onClick={() => toggle(s.title)}>
-              {added.includes(s.title) ? `✓ Added to your total — remove` : `+ Add ${money(s.total)} to my total`}
+              {added.includes(s.title) ? `✓ Added to your total — remove`
+                : s.choice && optionalSecs.some((o) => o.choice === s.choice && added.includes(o.title))
+                  ? `Switch to this option (${money(s.total)})`
+                  : `+ Add ${money(s.total)} to my total`}
             </button>
           )}
         </section>
