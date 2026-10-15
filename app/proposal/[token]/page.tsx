@@ -8,8 +8,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { FrontMatter, type FrontMatterData } from './FrontMatter';
+import type SignatureCanvasType from 'react-signature-canvas';
 
 const FN = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/get-design-proposal';
+const FN_APPROVE = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/submit-proposal-approval';
+
+type Approval = { signer_name: string; added_sections: string[]; approved_total: number; created_at: string };
 
 type Row = { name: string; qty: number; per: number };
 type Item = { desc: string; qty: number; unit: number; storeUrl: string | null };
@@ -318,6 +322,21 @@ export default function ProposalPage() {
   const [address, setAddress] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  // Approve & sign (2026-10-14): the customer can add/remove optional sections
+  // (nothing is saved until they sign) and approve the resulting total.
+  const [added, setAdded] = useState<string[]>([]);
+  const [approval, setApproval] = useState<Approval | null>(null);
+  const [signerName, setSignerName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [signErr, setSignErr] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [SigCanvas, setSigCanvas] = useState<any>(null);
+  const sigRef = useRef<SignatureCanvasType | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    import('react-signature-canvas').then((mod) => { if (mounted) setSigCanvas(() => mod.default); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -326,9 +345,35 @@ export default function ProposalPage() {
         if (!r.ok) throw new Error('This proposal link is not available.');
         const j = await r.json();
         setSnap(j.proposal); setTitle(j.title); setAddress(j.address ?? '');
+        if (j.approval) { setApproval(j.approval); setAdded(j.approval.added_sections ?? []); }
       } catch (e) { setErr((e as Error).message); }
     })();
   }, [token]);
+
+  const toggle = (t: string) => {
+    if (approval) return;
+    setAdded((a) => (a.includes(t) ? a.filter((x) => x !== t) : [...a, t]));
+  };
+
+  const approve = async () => {
+    if (!snap) return;
+    setSignErr(null);
+    if (!sigRef.current || sigRef.current.isEmpty()) { setSignErr('Please sign in the box above.'); return; }
+    if (!signerName.trim()) { setSignErr('Please type your full name.'); return; }
+    setSubmitting(true);
+    try {
+      const r = await fetch(FN_APPROVE, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token, signer_name: signerName.trim(), added_sections: added,
+          signature_base64: sigRef.current.getTrimmedCanvas().toDataURL('image/png'),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Something went wrong.');
+      setApproval(j.approval); setAdded(j.approval.added_sections ?? []);
+    } catch (e) { setSignErr((e as Error).message); } finally { setSubmitting(false); }
+  };
 
   if (err) return <div className="pp-err">{err}</div>;
   if (!snap) return <div className="pp-err">Loading your proposal…</div>;
@@ -338,7 +383,12 @@ export default function ProposalPage() {
     { id: 'roughin', label: 'Pre-Wire' },
     ...snap.sections.map((s) => ({ id: slug(s.title), label: s.title.split(' ')[0] })),
     { id: 'summary', label: 'Summary' },
+    { id: 'approve', label: approval ? 'Approved' : 'Approve' },
   ];
+  const isTbd = (s: Section) => /\btbd\b/i.test(s.priority) && !/optional/i.test(s.priority);
+  const optionalSecs = snap.sections.filter((s) => s.optional);
+  const addedSecs = optionalSecs.filter((s) => added.includes(s.title));
+  const total = snap.grand + addedSecs.reduce((t, s) => t + s.total, 0);
 
   return (
     <div className="pp">
@@ -429,6 +479,11 @@ export default function ProposalPage() {
             </tbody>
           </table></div>
           {s.pick && <p className="pp-pick">{s.pick}</p>}
+          {s.optional && !approval && (
+            <button className={'pp-add' + (added.includes(s.title) ? ' is-on' : '')} onClick={() => toggle(s.title)}>
+              {added.includes(s.title) ? `✓ Added to your total — remove` : `+ Add ${money(s.total)} to my total`}
+            </button>
+          )}
         </section>
       ))}
 
@@ -439,11 +494,55 @@ export default function ProposalPage() {
           {snap.sections.filter((s) => !s.optional).map((s) => (
             <tr key={s.title}><td>{s.title}</td><td className="n">{money(s.total)}</td></tr>
           ))}
-          <tr className="pp-grand"><td>Full system</td><td className="n">{money(snap.grand)}</td></tr>
-          {snap.sections.filter((s) => s.optional).map((s) => (
-            <tr key={s.title} className="pp-opt"><td>+ {/\btbd\b/i.test(s.priority) ? 'TBD' : 'Optional'} · {s.title}</td><td className="n">{money(s.total)}</td></tr>
+          {addedSecs.map((s) => (
+            <tr key={s.title} className="pp-added"><td>{s.title} <span className="pp-tag">added</span>
+              {!approval && <button className="pp-link" onClick={() => toggle(s.title)}>Remove</button>}</td>
+              <td className="n">{money(s.total)}</td></tr>
+          ))}
+          <tr className="pp-grand"><td>{addedSecs.length ? 'Your total' : 'Full system'}</td><td className="n">{money(total)}</td></tr>
+          {optionalSecs.filter((s) => !added.includes(s.title)).map((s) => (
+            <tr key={s.title} className="pp-opt"><td>+ {isTbd(s) ? 'TBD' : 'Optional'} · {s.title}
+              {!approval && <button className="pp-link" onClick={() => toggle(s.title)}>Add</button>}</td>
+              <td className="n">{money(s.total)}</td></tr>
           ))}
         </tbody></table>
+      </section>
+
+      <section id="approve" className="pp-approve">
+        {approval ? (
+          <div className="pp-approved">
+            <div className="pp-approved-h">✓ Approved</div>
+            Approved by <b>{approval.signer_name}</b> on{' '}
+            {new Date(approval.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            {' — '}<b>{money(approval.approved_total)}</b> before tax
+            {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>}.
+            <p className="pp-note">Thank you! We&apos;ll be in touch to schedule and to send your deposit invoice.</p>
+          </div>
+        ) : (
+          <>
+            <h2 className="pp-h2">Approve this proposal</h2>
+            <div className="pp-approve-total"><span>Total to approve (before tax)</span><b>{money(total)}</b></div>
+            <p className="pp-note">
+              {addedSecs.length
+                ? <>Includes the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added: {addedSecs.map((s) => s.title).join(', ')}. </>
+                : <>No optional sections added. You can add any of them above before signing. </>}
+              By signing you approve this proposal and its terms (below). We&apos;ll follow up with your deposit invoice and schedule.
+            </p>
+            <div className="signature-wrap">
+              {SigCanvas
+                ? <SigCanvas ref={sigRef} canvasProps={{ className: 'signature-pad' }} penColor="#000" />
+                : <div style={{ padding: 24, textAlign: 'center' }}>Loading signature pad…</div>}
+            </div>
+            <div className="signature-hint">Sign above with your finger, stylus or mouse ·{' '}
+              <button className="pp-link" onClick={() => sigRef.current?.clear()}>Clear</button></div>
+            <input className="input" placeholder="Type your full name" value={signerName}
+              onChange={(e) => setSignerName(e.target.value)} autoComplete="name" />
+            {signErr && <div className="pp-sign-err">{signErr}</div>}
+            <button className="pp-approve-btn" disabled={submitting} onClick={() => void approve()}>
+              {submitting ? 'Submitting…' : `Approve & Sign — ${money(total)}`}
+            </button>
+          </>
+        )}
       </section>
 
       <div className="pp-cta-wrap"><a className="pp-cta" href="sms:+19288437767">Questions? Text Kyle — (928) 843-7767</a></div>
