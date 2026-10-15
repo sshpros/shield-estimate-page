@@ -397,6 +397,10 @@ export default function ProposalPage() {
   const optionalSecs = snap.sections.filter((s) => s.optional);
   const addedSecs = optionalSecs.filter((s) => added.includes(s.title));
   const total = snap.grand + addedSecs.reduce((t, s) => t + s.total, 0);
+  // Only the Phase 1 pre-wire is final at signing (Kyle 2026-10-15); the
+  // Phase 2 trim-out is shown as a preliminary remainder, not approved.
+  const prewire = snap.phase1.total;
+  const trimOut = total - prewire;
 
   return (
     <div className="pp">
@@ -530,20 +534,25 @@ export default function ProposalPage() {
             <div className="pp-approved-h">✓ Approved</div>
             Approved by <b>{approval.signer_name}</b> on{' '}
             {new Date(approval.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            {' — '}<b>{money(approval.approved_total)}</b> before tax
-            {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>}.
-            <p className="pp-note">Phase 1 structured wiring is final. Phase 2 sections can still be updated, changed, added or removed, and each is finalized individually at Phase 2.</p>
+            {' — '}Phase 1 pre-wire <b>{money(prewire)}</b> before tax.
+            <p className="pp-note">The Phase 1 pre-wire is final. The Phase 2 trim-out sections in your current plan
+              {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>} total{' '}
+              {money(approval.approved_total - prewire)} for a full plan of {money(approval.approved_total)}; they can still be changed and customized as we trim out, and each is finalized individually at Phase 2.</p>
             <p className="pp-note">Thank you! We&apos;ll be in touch to schedule and to send your deposit invoice.</p>
           </div>
         ) : (
           <>
             <h2 className="pp-h2">Approve this proposal</h2>
-            <div className="pp-approve-total"><span>Total to approve (before tax)</span><b>{money(total)}</b></div>
+            <div className="pp-approve-total"><span>Phase 1 pre-wire to approve (before tax)</span><b>{money(prewire)}</b></div>
+            <div className="pp-approve-rest"><span>Phase 2 trim-out, preliminary (before tax)</span><span>{money(trimOut)}</span></div>
+            <div className="pp-approve-rest"><span>Full plan as currently designed</span><span>{money(total)}</span></div>
             <p className="pp-note">
+              The Phase 2 trim-out total covers every trim-out section in your current plan
               {addedSecs.length
-                ? <>Includes the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added: {addedSecs.map((s) => s.title).join(', ')}. </>
-                : <>No optional sections added. You can add any of them above before signing. </>}
-              By signing you approve the Phase 1 structured wiring as final and the Phase 2 sections as your current plan, which can still change before each is finalized at Phase 2, along with the terms below. We&apos;ll follow up with your deposit invoice and schedule.
+                ? <>, including the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added ({addedSecs.map((s) => s.title).join(', ')})</>
+                : <> (you can still add optional sections above)</>}.
+              It is not final: those sections can be changed and customized further as we trim out, and each is finalized individually at Phase 2.
+              By signing you approve the Phase 1 pre-wire as final, along with the terms below. We&apos;ll follow up with your deposit invoice and schedule.
             </p>
             <div className="signature-wrap">
               {SigCanvas
@@ -556,7 +565,7 @@ export default function ProposalPage() {
               onChange={(e) => setSignerName(e.target.value)} autoComplete="name" />
             {signErr && <div className="pp-sign-err">{signErr}</div>}
             <button className="pp-approve-btn" disabled={submitting} onClick={() => void approve()}>
-              {submitting ? 'Submitting…' : `Approve & Sign — ${money(total)}`}
+              {submitting ? 'Submitting…' : `Approve & Sign — Pre-Wire ${money(prewire)}`}
             </button>
           </>
         )}
