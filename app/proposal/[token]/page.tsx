@@ -24,6 +24,8 @@ type Section = {
   itemsTotal: number; total: number; optional: boolean; items: Item[];
   /// Optional sections sharing a choice group are alternatives — at most one.
   choice?: string | null;
+  /// Hero banner under the heading (public image URL).
+  image?: string | null;
 };
 type Snapshot = {
   publishedAt: string;
@@ -461,6 +463,7 @@ export default function ProposalPage() {
             {s.priority ? <span className={'pp-pr' + (s.optional ? ' opt' : '')}>{s.priority}</span> : null}
             {s.title}
           </h2>
+          {s.image && <img className="pp-sec-hero" src={s.image} alt="" loading="lazy" />}
           {s.note && <p className="pp-note">{s.note}</p>}
           <div className="pp-card pp-tw"><table>
             <thead><tr><th>Item</th><th className="q">Qty</th><th className="n">Unit</th><th className="n">Ext.</th></tr></thead>
