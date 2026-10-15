@@ -16,7 +16,8 @@ const FN_APPROVE = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/submit
 type Approval = { signer_name: string; added_sections: string[]; approved_total: number; created_at: string };
 
 type Row = { name: string; qty: number; per: number };
-type Item = { desc: string; qty: number; unit: number; storeUrl: string | null };
+/// was: original unit price, struck through. sub: a credit tied to the line above.
+type Item = { desc: string; qty: number; unit: number; storeUrl: string | null; was?: number | null; sub?: boolean };
 type Section = {
   title: string; priority: string; note: string; pick: string;
   installLabel: string; installAmount: number; totalLabel: string;
@@ -468,9 +469,9 @@ export default function ProposalPage() {
                 <tr key={i} style={it.qty * it.unit < 0 ? { color: '#15803d', fontWeight: 600 } : undefined}>
                   <td>{it.storeUrl
                     ? <a className="pp-store" href={it.storeUrl} target="_blank" rel="noreferrer">{it.desc}<span> · view in store ↗</span></a>
-                    : it.desc}</td>
+                    : it.sub ? <span className="pp-sub-item">↳ {it.desc}</span> : it.desc}</td>
                   <td className="q">{it.qty}</td>
-                  <td className="n">{money(it.unit)}</td>
+                  <td className="n">{it.was != null && it.was !== it.unit ? <s className="pp-was">{money(it.was)}</s> : null}{money(it.unit)}</td>
                   <td className="n">{money(it.qty * it.unit)}</td>
                 </tr>
               ))}

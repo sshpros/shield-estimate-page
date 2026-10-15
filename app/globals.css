@@ -286,3 +286,7 @@ input, textarea { font-family: inherit; }
 .pp-lb-nav.is-next{right:.75rem;}
 @media (max-width:700px){.pp-lb-hint{display:none;}}
 @media (prefers-reduced-motion: reduce){.pp-cta-wrap::before,.pp-cta-wrap::after{animation:none;}}
+
+/* Proposal: struck-through original price + credits nested under their line */
+.pp-was{color:var(--text-3);font-weight:400;margin-right:.4em;}
+.pp-sub-item{display:inline-block;padding-left:1.1rem;text-indent:-1.1rem;font-size:.92em;}
