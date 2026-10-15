@@ -29,7 +29,8 @@ type Snapshot = {
   frontMatter?: FrontMatterData;
 };
 
-const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
+// Credits (negative lines, e.g. a design/PM concession) read as −$X, never $-X.
+const money = (n: number) => (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 type Sheet = { floor: string; url: string; preview?: string; w: number; h: number };
@@ -409,7 +410,7 @@ export default function ProposalPage() {
             <thead><tr><th>Item</th><th className="q">Qty</th><th className="n">Unit</th><th className="n">Ext.</th></tr></thead>
             <tbody>
               {s.items.map((it, i) => (
-                <tr key={i}>
+                <tr key={i} style={it.qty * it.unit < 0 ? { color: '#15803d', fontWeight: 600 } : undefined}>
                   <td>{it.storeUrl
                     ? <a className="pp-store" href={it.storeUrl} target="_blank" rel="noreferrer">{it.desc}<span> · view in store ↗</span></a>
                     : it.desc}</td>
