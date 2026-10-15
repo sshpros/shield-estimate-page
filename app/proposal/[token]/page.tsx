@@ -521,6 +521,7 @@ export default function ProposalPage() {
               <td className="n">{money(s.total)}</td></tr>
           ))}
         </tbody></table>
+        <p className="pp-note pp-final-note"><b>Only Phase 1 is final when you sign.</b> The Phase 1 structured wiring is what we lock in for rough-in. Every Phase 2 section can still be updated, changed, added or removed as you make decisions, and each one is finalized individually at Phase 2.</p>
       </section>
 
       <section id="approve" className="pp-approve">
@@ -531,6 +532,7 @@ export default function ProposalPage() {
             {new Date(approval.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             {' — '}<b>{money(approval.approved_total)}</b> before tax
             {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>}.
+            <p className="pp-note">Phase 1 structured wiring is final. Phase 2 sections can still be updated, changed, added or removed, and each is finalized individually at Phase 2.</p>
             <p className="pp-note">Thank you! We&apos;ll be in touch to schedule and to send your deposit invoice.</p>
           </div>
         ) : (
@@ -541,7 +543,7 @@ export default function ProposalPage() {
               {addedSecs.length
                 ? <>Includes the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added: {addedSecs.map((s) => s.title).join(', ')}. </>
                 : <>No optional sections added. You can add any of them above before signing. </>}
-              By signing you approve this proposal and its terms (below). We&apos;ll follow up with your deposit invoice and schedule.
+              By signing you approve the Phase 1 structured wiring as final and the Phase 2 sections as your current plan, which can still change before each is finalized at Phase 2, along with the terms below. We&apos;ll follow up with your deposit invoice and schedule.
             </p>
             <div className="signature-wrap">
               {SigCanvas
