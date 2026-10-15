@@ -317,6 +317,7 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef, large }: {
         // fills the slot; anything else (half-width units) keeps its proportions.
         // On a shelf the unit always keeps its proportions, sitting on the shelf lip.
         const onShelf = it.kind === "shelf";
+        const shelfCount = onShelf ? Math.max(1, Math.min(4, Number(/^Shelf — (\d+)×/.exec(it.label)?.[1] ?? 1))) : 1;
         const earsInPhoto = it.face?.ears === "image";
         // Photos that include their ears always span ear-to-ear (the ears sit on the rails).
         const fill = earsInPhoto || (!onShelf && it.face && Math.abs(Math.log(it.face.ar / (10.1 / it.size_u))) < 0.12);
@@ -330,7 +331,11 @@ export function RackSvg({ rack, selectedId, onItemDown, svgRef, large }: {
                 <>
                   <rect x={rail + 1} y={y + 0.5} width={188} height={h - 1} fill="#0b1220" />
                   {earTabs(y, h, it.size_u, onShelf ? st.fill : it.face.ears ?? "#9ca3af", "ears")}
-                  <image href={it.face.url} x={rail + 1} y={y + 0.5} width={188} height={h - (onShelf ? 2.5 : 1)} preserveAspectRatio={fill ? "none" : onShelf ? "xMidYMax meet" : "xMidYMid meet"} />
+                  {/* "Shelf — 2× …": the same true-scale shelf photo repeated side by side
+                      (each copy centred in its share of the shelf), e.g. two Sonos Amps. */}
+                  {Array.from({ length: shelfCount }, (_, k) => (
+                    <image key={k} href={it.face!.url} x={rail + 1 + 188 * ((k + 0.5) / shelfCount - 0.5)} y={y + 0.5} width={188} height={h - (onShelf ? 2.5 : 1)} preserveAspectRatio={fill ? "none" : onShelf ? "xMidYMax meet" : "xMidYMid meet"} />
+                  ))}
                   {onShelf && <rect x={rail + 1} y={y + h - 2} width={188} height={1.5} fill="#64748b" />}
                 </>
               )
