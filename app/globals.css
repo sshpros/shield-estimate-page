@@ -253,6 +253,7 @@ input, textarea { font-family: inherit; }
 .pp-approve{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:1.1rem 1.3rem;margin:1.6rem 0;}
 .pp-approve-total{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;font-size:1rem;margin:.2rem 0 .6rem;}
 .pp-approve-total b{font-size:1.4rem;}
+.pp-approve-rest{display:flex;justify-content:space-between;gap:1rem;font-size:.92rem;color:var(--text-2);margin:0 0 .35rem;}
 .pp-approve-btn{display:block;width:100%;padding:15px;border:0;border-radius:12px;background:var(--green);color:#fff;font-weight:800;font-size:1.02rem;cursor:pointer;}
 .pp-approve-btn:disabled{opacity:.6;cursor:default;}
 .pp-sign-err{color:#dc2626;font-size:.88rem;font-weight:600;margin:0 0 .6rem;}
