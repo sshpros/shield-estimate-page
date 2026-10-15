@@ -440,7 +440,7 @@ export default function ProposalPage() {
           ))}
           <tr className="pp-grand"><td>Full system</td><td className="n">{money(snap.grand)}</td></tr>
           {snap.sections.filter((s) => s.optional).map((s) => (
-            <tr key={s.title} className="pp-opt"><td>+ Optional · {s.title}</td><td className="n">{money(s.total)}</td></tr>
+            <tr key={s.title} className="pp-opt"><td>+ {/\btbd\b/i.test(s.priority) ? 'TBD' : 'Optional'} · {s.title}</td><td className="n">{money(s.total)}</td></tr>
           ))}
         </tbody></table>
       </section>
