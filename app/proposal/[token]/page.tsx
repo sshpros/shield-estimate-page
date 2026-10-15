@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { FrontMatter, type FrontMatterData } from './FrontMatter';
+import { sectionLinks, type SectionLink } from './sectionLinks';
 import type SignatureCanvasType from 'react-signature-canvas';
 
 const FN = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/get-design-proposal';
@@ -26,6 +27,8 @@ type Section = {
   choice?: string | null;
   /// Hero banner under the heading (public image URL).
   image?: string | null;
+  /// "Learn more" links to our site; null = the defaults for the title.
+  links?: SectionLink[] | null;
 };
 type Snapshot = {
   publishedAt: string;
@@ -469,6 +472,7 @@ export default function ProposalPage() {
           </h2>
           {s.image && <img className="pp-sec-hero" src={s.image} alt="" loading="lazy" />}
           {s.note && <p className="pp-note">{s.note}</p>}
+          <LearnMore links={sectionLinks(s.title, s.links)} />
           <div className="pp-card pp-tw"><table>
             <thead><tr><th>Item</th><th className="q">Qty</th><th className="n">Unit</th><th className="n">Ext.</th></tr></thead>
             <tbody>
@@ -583,6 +587,17 @@ export default function ProposalPage() {
         <SheetLightbox sheets={snap.sheets} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />
       )}
     </div>
+  );
+}
+
+function LearnMore({ links }: { links: SectionLink[] }) {
+  if (!links.length) return null;
+  return (
+    <p className="pp-learn">Learn more:{' '}
+      {links.map((k, i) => (
+        <span key={k.url}>{i > 0 && ' · '}<a href={k.url} target="_blank" rel="noreferrer">{k.label} ↗</a></span>
+      ))}
+    </p>
   );
 }
 
