@@ -562,8 +562,6 @@ export default function ProposalPage() {
             {phased ? (
               <>
                 <div className="pp-approve-total"><span>Phase 1 pre-wire to approve (before tax)</span><b>{money(prewire)}</b></div>
-                <div className="pp-approve-rest pp-pay"><span>↳ 50% to get on the schedule and begin</span><span>{money(half(prewire))}</span></div>
-                <div className="pp-approve-rest pp-pay"><span>↳ 50% when the pre-wire is complete</span><span>{money(prewire - half(prewire))}</span></div>
                 <div className="pp-approve-rest"><span>Phase 2 trim-out, preliminary (before tax)</span><span>{money(trimOut)}</span></div>
                 <div className="pp-approve-rest"><span>Full plan as currently designed</span><span>{money(total)}</span></div>
                 <p className="pp-note">
@@ -572,15 +570,13 @@ export default function ProposalPage() {
                     ? <>, including the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added ({addedSecs.map((s) => s.title).join(', ')})</>
                     : <> (you can still add optional sections above)</>}.
                   It is not final: those sections can be changed and customized further as we trim out, and each is finalized individually at Phase 2.
-                  Trim-out is billed the same way: 50% when each section is finalized and 50% when it&apos;s complete.
+                  Trim-out is billed 50% when each section is finalized and 50% when it&apos;s complete.
                   By signing you approve the Phase 1 pre-wire as final, along with the terms below. {billTo}
                 </p>
               </>
             ) : (
               <>
                 <div className="pp-approve-total"><span>Total to approve (before tax)</span><b>{money(total)}</b></div>
-                <div className="pp-approve-rest pp-pay"><span>↳ 50% to get on the schedule</span><span>{money(half(total))}</span></div>
-                <div className="pp-approve-rest pp-pay"><span>↳ 50% on completion</span><span>{money(total - half(total))}</span></div>
                 <p className="pp-note">
                   {addedSecs.length
                     ? <>Includes the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added: {addedSecs.map((s) => s.title).join(', ')}. </>
