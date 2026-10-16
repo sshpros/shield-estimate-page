@@ -404,6 +404,13 @@ export default function ProposalPage() {
   // Phase 2 trim-out is shown as a preliminary remainder, not approved.
   const prewire = snap.phase1.total;
   const trimOut = total - prewire;
+  // Payment schedule (Kyle 2026-10-15): 50% of the pre-wire to get on the
+  // schedule, 50% when it's complete; trim-out sections the same once
+  // finalized. A proposal with no new pre-wire (e.g. a retrofit) approves the
+  // full total instead, 50% to schedule and 50% on completion.
+  const phased = prewire > 0;
+  const half = (n: number) => Math.round(n * 50) / 100;
+  const billTo = <>If your GC or builder handles payments, you have your own payment schedule, or we should bill a different contact or payment method, just let us know.</>;
 
   return (
     <div className="pp">
@@ -538,26 +545,50 @@ export default function ProposalPage() {
             <div className="pp-approved-h">✓ Approved</div>
             Approved by <b>{approval.signer_name}</b> on{' '}
             {new Date(approval.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            {' — '}Phase 1 pre-wire <b>{money(prewire)}</b> before tax.
-            <p className="pp-note">The Phase 1 pre-wire is final. The Phase 2 trim-out sections in your current plan
-              {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>} total{' '}
-              {money(approval.approved_total - prewire)} for a full plan of {money(approval.approved_total)}; they can still be changed and customized as we trim out, and each is finalized individually at Phase 2.</p>
-            <p className="pp-note">Thank you! We&apos;ll be in touch to schedule and to send your deposit invoice.</p>
+            {phased
+              ? <>{' — '}Phase 1 pre-wire <b>{money(prewire)}</b> before tax.</>
+              : <>{' — '}<b>{money(approval.approved_total)}</b> before tax
+                {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>}.</>}
+            {phased && (
+              <p className="pp-note">The Phase 1 pre-wire is final. The Phase 2 trim-out sections in your current plan
+                {approval.added_sections.length > 0 && <> (including {approval.added_sections.join(', ')})</>} total{' '}
+                {money(approval.approved_total - prewire)} for a full plan of {money(approval.approved_total)}; they can still be changed and customized as we trim out, and each is finalized individually at Phase 2.</p>
+            )}
+            <p className="pp-note">Thank you! Next we&apos;ll send your deposit invoice for {money(half(phased ? prewire : approval.approved_total))} (50%{phased ? ' of the pre-wire' : ''}) to get you on the schedule. {billTo}</p>
           </div>
         ) : (
           <>
             <h2 className="pp-h2">Approve this proposal</h2>
-            <div className="pp-approve-total"><span>Phase 1 pre-wire to approve (before tax)</span><b>{money(prewire)}</b></div>
-            <div className="pp-approve-rest"><span>Phase 2 trim-out, preliminary (before tax)</span><span>{money(trimOut)}</span></div>
-            <div className="pp-approve-rest"><span>Full plan as currently designed</span><span>{money(total)}</span></div>
-            <p className="pp-note">
-              The Phase 2 trim-out total covers every trim-out section in your current plan
-              {addedSecs.length
-                ? <>, including the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added ({addedSecs.map((s) => s.title).join(', ')})</>
-                : <> (you can still add optional sections above)</>}.
-              It is not final: those sections can be changed and customized further as we trim out, and each is finalized individually at Phase 2.
-              By signing you approve the Phase 1 pre-wire as final, along with the terms below. We&apos;ll follow up with your deposit invoice and schedule.
-            </p>
+            {phased ? (
+              <>
+                <div className="pp-approve-total"><span>Phase 1 pre-wire to approve (before tax)</span><b>{money(prewire)}</b></div>
+                <div className="pp-approve-rest pp-pay"><span>↳ 50% to get on the schedule and begin</span><span>{money(half(prewire))}</span></div>
+                <div className="pp-approve-rest pp-pay"><span>↳ 50% when the pre-wire is complete</span><span>{money(prewire - half(prewire))}</span></div>
+                <div className="pp-approve-rest"><span>Phase 2 trim-out, preliminary (before tax)</span><span>{money(trimOut)}</span></div>
+                <div className="pp-approve-rest"><span>Full plan as currently designed</span><span>{money(total)}</span></div>
+                <p className="pp-note">
+                  The Phase 2 trim-out total covers every trim-out section in your current plan
+                  {addedSecs.length
+                    ? <>, including the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added ({addedSecs.map((s) => s.title).join(', ')})</>
+                    : <> (you can still add optional sections above)</>}.
+                  It is not final: those sections can be changed and customized further as we trim out, and each is finalized individually at Phase 2.
+                  Trim-out is billed the same way: 50% when each section is finalized and 50% when it&apos;s complete.
+                  By signing you approve the Phase 1 pre-wire as final, along with the terms below. {billTo}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="pp-approve-total"><span>Total to approve (before tax)</span><b>{money(total)}</b></div>
+                <div className="pp-approve-rest pp-pay"><span>↳ 50% to get on the schedule</span><span>{money(half(total))}</span></div>
+                <div className="pp-approve-rest pp-pay"><span>↳ 50% on completion</span><span>{money(total - half(total))}</span></div>
+                <p className="pp-note">
+                  {addedSecs.length
+                    ? <>Includes the optional {addedSecs.length === 1 ? 'section' : 'sections'} you added: {addedSecs.map((s) => s.title).join(', ')}. </>
+                    : <>No optional sections added. You can add any of them above before signing. </>}
+                  By signing you approve this proposal along with the terms below. {billTo}
+                </p>
+              </>
+            )}
             <div className="signature-wrap">
               {SigCanvas
                 ? <SigCanvas ref={sigRef} canvasProps={{ className: 'signature-pad' }} penColor="#000" />
@@ -569,7 +600,7 @@ export default function ProposalPage() {
               onChange={(e) => setSignerName(e.target.value)} autoComplete="name" />
             {signErr && <div className="pp-sign-err">{signErr}</div>}
             <button className="pp-approve-btn" disabled={submitting} onClick={() => void approve()}>
-              {submitting ? 'Submitting…' : `Approve & Sign — Pre-Wire ${money(prewire)}`}
+              {submitting ? 'Submitting…' : (phased ? `Approve & Sign — Pre-Wire ${money(prewire)}` : `Approve & Sign — ${money(total)}`)}
             </button>
           </>
         )}
