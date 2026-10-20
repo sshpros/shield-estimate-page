@@ -1071,6 +1071,14 @@ export default function EstimatePage() {
       )}
 
       <div className="card">
+        <div className="card-title">Time &amp; Materials</div>
+        <div className="notes-text">
+          Labor hours, cable and other time-and-materials (T&amp;M) items are estimates. They are billed for the
+          actual time and materials used, so T&amp;M charges are subject to change.
+        </div>
+      </div>
+
+      <div className="card">
         <div className="card-title">Pricing</div>
         <div className="totals-row item equipment">
           <span>Equipment</span>
