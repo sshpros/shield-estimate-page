@@ -19,6 +19,14 @@ const FN = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/get-gc-project
 const FN_UPDATE = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/submit-gc-update';
 const NAME_KEY = 'shield-gc-name';
 
+/** Each nav item is its own page; the hash keeps the back button and shared links working. */
+const TABS = ['overview', 'timeline', 'needs', 'plans', 'releases', 'activity'] as const;
+type Tab = (typeof TABS)[number];
+const tabFromHash = (): Tab => {
+  const h = window.location.hash.slice(1);
+  return (TABS as readonly string[]).includes(h) ? (h as Tab) : 'overview';
+};
+
 function readName(): string {
   try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; }
 }
@@ -38,6 +46,22 @@ export default function GcProjectPage() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ text: string; bad?: boolean } | null>(null);
   const [focus, setFocus] = useState<{ floor: string; locationId: string | null; itemId?: string } | null>(null);
+  const [tab, setTab] = useState<Tab>('overview');
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const sync = () => setTab(tabFromHash());
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+  const go = useCallback((t: Tab) => {
+    if (window.location.hash.slice(1) !== t) window.history.pushState(null, '', `#${t}`);
+    setTab(t);
+    // Land at the top of the new page, just under the header.
+    const nav = navRef.current;
+    if (nav && window.scrollY > nav.offsetTop) window.scrollTo({ top: nav.offsetTop });
+  }, []);
 
   const load = useCallback(async () => {
     const r = await fetch(`${FN}?token=${token}`, { cache: 'no-store' });
@@ -94,7 +118,7 @@ export default function GcProjectPage() {
   const nextMilestone = p.milestones.filter((m) => !m.done && m.date && m.date >= localDay()).sort((a, b) => a.date!.localeCompare(b.date!))[0];
   const showOnPlan = (floor: string, locationId: string | null, itemId?: string) => {
     setFocus({ floor, locationId, itemId });
-    document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' });
+    go('plans');
   };
 
   return (
@@ -111,21 +135,22 @@ export default function GcProjectPage() {
         {' · '}Updates every minute
       </p>
 
-      <nav className="pp-nav">
-        <a href="#overview">Overview</a>
-        <a href="#timeline">Timeline</a>
-        <a href="#needs">What we need{openItems.length ? ` (${openItems.length})` : ''}</a>
-        <a href="#plans">Plan sheets</a>
-        <a href="#releases">Drywall releases</a>
-        <a href="#activity">Activity</a>
+      <nav className="pp-nav" ref={navRef}>
+        {TABS.map((t) => (
+          <a key={t} href={`#${t}`} className={tab === t ? 'on' : ''} aria-current={tab === t ? 'page' : undefined}
+            onClick={(e) => { e.preventDefault(); go(t); }}>
+            {t === 'overview' ? 'Overview' : t === 'timeline' ? 'Timeline' : t === 'needs' ? `What we need${openItems.length ? ` (${openItems.length})` : ''}`
+              : t === 'plans' ? 'Plan sheets' : t === 'releases' ? 'Drywall releases' : 'Activity'}
+          </a>
+        ))}
       </nav>
 
-      <section id="overview">
+      {tab === 'overview' && <section id="overview">
         <div className="gc-kpis">
-          <Kpi label="Boxes roughed in" value={`${done} / ${total}`} pct={total ? done / total : 0} />
-          <Kpi label="Open items" value={String(openItems.length)} sub={`${openItems.filter((c) => c.owner !== 'Shield').length} for other trades`} />
-          <Kpi label="Floors released" value={`${data.floors.filter((f) => f.released_at).length} / ${data.floors.length}`} sub="Ready for drywall" />
-          <Kpi label="Next milestone" value={nextMilestone ? fmtDate(nextMilestone.date) : '—'} sub={nextMilestone?.title ?? 'None scheduled'} />
+          <Kpi label="Boxes roughed in" value={`${done} / ${total}`} pct={total ? done / total : 0} onClick={() => go('plans')} />
+          <Kpi label="Open items" value={String(openItems.length)} sub={`${openItems.filter((c) => c.owner !== 'Shield').length} for other trades`} onClick={() => go('needs')} />
+          <Kpi label="Floors released" value={`${data.floors.filter((f) => f.released_at).length} / ${data.floors.length}`} sub="Ready for drywall" onClick={() => go('releases')} />
+          <Kpi label="Next milestone" value={nextMilestone ? fmtDate(nextMilestone.date) : '—'} sub={nextMilestone?.title ?? 'None scheduled'} onClick={() => go('timeline')} />
         </div>
         <div className="pp-card gc-floors">
           {data.floors.map((f) => {
@@ -151,9 +176,15 @@ export default function GcProjectPage() {
             );
           })}
         </div>
-      </section>
+        <h2 className="pp-h2">Latest activity</h2>
+        <div className="pp-card gc-activity">
+          {data.activity.slice(0, 5).map((a, i) => <div key={i} className="gc-act"><span>{fmtWhen(a.at)}</span>{a.text}</div>)}
+          {data.activity.length === 0 && <div className="gc-empty">Nothing yet.</div>}
+          {data.activity.length > 5 && <button className="pp-link gc-more" onClick={() => go('activity')}>See all activity</button>}
+        </div>
+      </section>}
 
-      <section id="timeline">
+      {tab === 'timeline' && <section id="timeline">
         <div className="pp-band">Timeline</div>
         <p className="pp-note">Your dates for each floor. Change them any time — our crew plans around them and Shield is notified. Our estimate is based on the boxes left and the crew on site.</p>
         <div className="pp-card pp-tw">
@@ -169,20 +200,20 @@ export default function GcProjectPage() {
         <Milestones list={p.milestones} busy={busy}
           onSave={(m) => send('save_milestone', { milestone: m }, 'Milestone saved')}
           onDelete={(m) => send('delete_milestone', { id: m.id }, 'Milestone removed')} />
-      </section>
+      </section>}
 
-      <section id="needs">
+      {tab === 'needs' && <section id="needs">
         <div className="pp-band"><span>What we need from each trade</span><span>{openItems.length} open</span></div>
         <p className="pp-note">Everything our rough-in depends on — outlets, blocking, clearances, inspections. Check items off as they're done, leave a note or a photo, or add anything we should know about.</p>
         <Needs items={data.coordination} floors={data.floors} busy={busy} send={send} showOnPlan={showOnPlan} />
-      </section>
+      </section>}
 
-      <section id="plans">
+      {tab === 'plans' && <section id="plans">
         <div className="pp-band">Plan sheets</div>
         <Plans data={data} focus={focus} />
-      </section>
+      </section>}
 
-      <section id="releases">
+      {tab === 'releases' && <section id="releases">
         <div className="pp-band">Drywall releases</div>
         <p className="pp-note">When every box on a floor is pulled, labeled at both ends and photographed, we release it for drywall. Anything added after a release is a change order.</p>
         {data.floors.filter((f) => f.released_at).length === 0 && <div className="pp-card gc-empty">No floors released yet.</div>}
@@ -214,9 +245,9 @@ export default function GcProjectPage() {
             </div>
           );
         })}
-      </section>
+      </section>}
 
-      <section id="activity">
+      {tab === 'activity' && <section id="activity">
         <div className="pp-band">Activity</div>
         <div className="pp-card gc-activity">
           {data.progress.length > 0 && (
@@ -230,7 +261,7 @@ export default function GcProjectPage() {
           {data.activity.map((a, i) => <div key={i} className="gc-act"><span>{fmtWhen(a.at)}</span>{a.text}</div>)}
           {data.activity.length === 0 && <div className="gc-empty">Nothing yet.</div>}
         </div>
-      </section>
+      </section>}
 
       <footer className="pp-foot">
         Shield Low Voltage · {name ? <>You&apos;re updating as <b>{name}</b> · <button className="pp-link" onClick={() => { setNameDraft(name); pendingRun.current = null; setAskName(true); }}>change</button> · </> : null}
@@ -264,9 +295,10 @@ export default function GcProjectPage() {
 
 type Send = (action: string, payload: Record<string, unknown>, ok?: string) => Promise<void>;
 
-function Kpi({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) {
+function Kpi({ label, value, sub, pct, onClick }: { label: string; value: string; sub?: string; pct?: number; onClick?: () => void }) {
   return (
-    <div className="gc-kpi">
+    <div className={`gc-kpi${onClick ? ' tap' : ''}`} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+      onClick={onClick} onKeyDown={(e) => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}>
       <div className="gc-kpi-label">{label}</div>
       <div className="gc-kpi-value">{value}</div>
       {pct != null && <div className="gc-bar thin"><span className="done" style={{ width: `${pct * 100}%` }} /></div>}

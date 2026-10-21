@@ -392,4 +392,7 @@ input.gc-late{border-color:var(--amber);}
 .gc-toast.bad{background:var(--red);color:#fff;}
 @media (max-width:600px){.gc .pp-head{flex-direction:column;}.gc .pp-meta{text-align:left;}.gc-act span{display:block;}}
 .gc-mark.dim{opacity:.35;}
-.gc section{scroll-margin-top:56px;}
+.gc .pp-nav a.on{color:var(--text);background:color-mix(in srgb,var(--blue) 20%,transparent);border-color:var(--blue);}
+.gc-kpi.tap{cursor:pointer;transition:border-color .15s;}
+.gc-kpi.tap:hover{border-color:var(--blue);}
+.gc-activity .gc-more{display:block;margin:.6rem 0 0;}
