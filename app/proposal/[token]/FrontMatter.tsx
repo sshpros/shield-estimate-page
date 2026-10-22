@@ -7,7 +7,8 @@
 // FrontMatterData shape published in design_projects.published_proposal, so
 // keep the two copies in sync when changing either.
 
-export type FrontLegendRow = { label: string; wire: string; icon: string };
+/// pin: the icon is a full cable-colored pin (2026-10-22), drawn without the old ring.
+export type FrontLegendRow = { label: string; wire: string; icon: string; pin?: boolean };
 export type FrontMatterData = {
   cover: { url: string; w: number; h: number } | null;
   legendFull: { sys: string; color: string; rows: FrontLegendRow[] }[];
@@ -51,6 +52,8 @@ const CSS = `
 .fm-row{display:grid;grid-template-columns:2rem 1fr;gap:.5rem;align-items:center;padding:.35rem .6rem;border-top:1px solid #eef1f5;}
 .fm-row .ic{width:1.7rem;height:1.7rem;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;background:#fff;}
 .fm-row .ic img{width:1.1rem;height:1.1rem;}
+.fm-row .ic.pin{border:none;background:none;}
+.fm-row .ic.pin img{width:1.7rem;height:1.7rem;}
 .fm-row .lb{font-size:.82rem;font-weight:600;line-height:1.2;}
 .fm-row .wr{font-size:.72rem;color:#5c6675;line-height:1.25;}
 .fm-note{font-size:.78rem;color:#5c6675;margin-top:.8rem;line-height:1.45;}
@@ -116,14 +119,14 @@ export function LegendPage({ groups }: { groups: FrontMatterData["legendFull"] }
             <h4 style={{ background: g.color }}>{g.sys}</h4>
             {g.rows.map((r) => (
               <div className="fm-row" key={r.label}>
-                <div className="ic" style={{ borderColor: g.color }}>{r.icon ? <img src={r.icon} alt="" /> : null}</div>
+                <div className={r.pin ? "ic pin" : "ic"} style={{ borderColor: g.color }}>{r.icon ? <img src={r.icon} alt="" /> : null}</div>
                 <div><div className="lb">{r.label}</div>{r.wire ? <div className="wr">{r.wire}</div> : null}</div>
               </div>
             ))}
           </div>
         ))}
       </div>
-      <p className="fm-note">Each drawing sheet carries an <b>"If used"</b> legend listing only the symbols that appear on that sheet. All cable is home-run to the head-end shown on the drawings and labeled at both ends.</p>
+      <p className="fm-note">Each drawing sheet carries an <b>"If used"</b> legend listing only the symbols that appear on that sheet. Each symbol is filled with the color of the cable run to it. All cable is home-run to the head-end shown on the drawings and labeled at both ends, except smoke and CO detectors, which are daisy-chained by floor.</p>
     </div>
   );
 }
