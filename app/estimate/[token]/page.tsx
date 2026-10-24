@@ -37,6 +37,8 @@ type Tier = {
   labor_total: number;
   labor_hours?: number | null;
   labor_rate?: number | null;
+  /** Regular rate before an hourly discount — shown struck through. */
+  labor_regular_rate?: number | null;
   labor_tech_count?: number | null;
   labor_is_flat?: boolean | null;
   dispatch_fee?: number;
@@ -109,6 +111,7 @@ type LaborInfo = {
   total: number;
   hours?: number | null;
   rate?: number | null;
+  regular_rate?: number | null;
   tech_count?: number | null;
   is_flat?: boolean | null;
 };
@@ -498,7 +501,7 @@ export default function EstimatePage() {
 
   const totals = useMemo(() => {
     if (!data)
-      return { equipment: 0, labor: 0, laborHours: null, laborRate: null, laborTechs: 1, laborIsFlat: false, dispatch: 0, dispatchGross: 0, dispatchDiscount: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
+      return { equipment: 0, labor: 0, laborHours: null, laborRate: null, laborRegularRate: null, laborTechs: 1, laborIsFlat: false, dispatch: 0, dispatchGross: 0, dispatchDiscount: 0, dispatchItemized: true, subtotal: 0, discount: 0, discountReason: '', tax: 0, total: 0, monthly: 0, monthlyOriginal: 0, lineDiscounts: 0 };
 
     if (isTiered && activeTier) {
       // Server tier totals already exclude reference sections. When the
@@ -513,6 +516,7 @@ export default function EstimatePage() {
           labor: activeTier.labor_total,
           laborHours: activeTier.labor_hours ?? null,
           laborRate: activeTier.labor_rate ?? null,
+          laborRegularRate: activeTier.labor_regular_rate ?? null,
           laborTechs: Math.max(1, Number(activeTier.labor_tech_count ?? 1)),
           laborIsFlat: activeTier.labor_is_flat === true,
           dispatch: Math.max(0, (activeTier.dispatch_fee ?? data.dispatch_fee ?? 0) - (activeTier.dispatch_discount ?? data.dispatch_discount ?? 0)),
@@ -542,6 +546,7 @@ export default function EstimatePage() {
         labor: activeTier.labor_total,
         laborHours: activeTier.labor_hours ?? null,
         laborRate: activeTier.labor_rate ?? null,
+        laborRegularRate: activeTier.labor_regular_rate ?? null,
         laborTechs: Math.max(1, Number(activeTier.labor_tech_count ?? 1)),
         laborIsFlat: activeTier.labor_is_flat === true,
         dispatch: Math.max(0, (activeTier.dispatch_fee ?? data.dispatch_fee ?? 0) - (activeTier.dispatch_discount ?? data.dispatch_discount ?? 0)),
@@ -626,7 +631,7 @@ export default function EstimatePage() {
     const lineDiscounts = countedItems
       .filter((li) => li.is_recurring !== true)
       .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
-    return { equipment, labor, laborHours: laborIsFlat ? null : (laborHoursVal || null), laborRate: laborIsFlat ? null : (laborRateVal || null), laborTechs, laborIsFlat, dispatch, dispatchGross, dispatchDiscount, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
+    return { equipment, labor, laborHours: laborIsFlat ? null : (laborHoursVal || null), laborRate: laborIsFlat ? null : (laborRateVal || null), laborRegularRate: laborIsFlat ? null : (Number(data.labor?.regular_rate ?? 0) > laborRateVal + 0.005 ? Number(data.labor?.regular_rate) : null), laborTechs, laborIsFlat, dispatch, dispatchGross, dispatchDiscount, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
   }, [data, lineItems, isTiered, activeTier, countedItems, addedSums, addedSet]);
 
   // How the labor number was built, in the customer's words. Mirrors the PDF
@@ -641,6 +646,16 @@ export default function EstimatePage() {
     if (hrs > 0 && rate > 0) return `${hrs} hrs × ${crew} × ${rateStr}/hr`;
     if (hrs > 0) return `${hrs} hrs × ${crew}`;
     return techs > 1 ? `Crew of ${techs}` : '';
+  }, [totals]);
+  /** "$150/hr → $135/hr" when the hourly rate is discounted, else null. */
+  const laborRateDiscount = useMemo(() => {
+    const reg = Number(totals.laborRegularRate ?? 0);
+    const rate = Number(totals.laborRate ?? 0);
+    if (totals.laborIsFlat || !(reg > rate + 0.005) || rate <= 0) return null;
+    const money = (n: number) => (Number.isInteger(n) ? `$${n}` : fmt(n));
+    const hrs = Number(totals.laborHours ?? 0);
+    const techs = Math.max(1, Number(totals.laborTechs ?? 1));
+    return { regular: money(reg), charged: money(rate), saved: Math.round((reg - rate) * hrs * techs * 100) / 100 };
   }, [totals]);
   const laborShortLabel = useMemo(() => {
     const techs = Math.max(1, Number(totals.laborTechs ?? 1));
@@ -1035,6 +1050,14 @@ export default function EstimatePage() {
               <div className="service-details">
                 <div className="service-name">Professional installation</div>
                 <div className="service-meta">{laborBreakdown}</div>
+                {laborRateDiscount && (
+                  // Hourly discount (Kyle 2026-10-24): regular rate struck through.
+                  <div className="service-meta">
+                    <s style={{ opacity: 0.6 }}>{laborRateDiscount.regular}/hr</s>{' '}
+                    <strong style={{ color: 'var(--green)' }}>{laborRateDiscount.charged}/hr</strong>
+                    {' · you save '}{fmt(laborRateDiscount.saved)}
+                  </div>
+                )}
                 {!totals.dispatchItemized && totals.dispatch > 0 && (
                   <div className="service-meta">Includes the trip &amp; service call</div>
                 )}
