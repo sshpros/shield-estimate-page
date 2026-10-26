@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   estimates, fmtDate, fmtWhen, localDay, OWNERS, requirementOf, ruleDrops, shrinkPhoto, STATUS_COLOR, TRADE_COLOR,
-  type Dates, type Item, type Milestone, type Project,
+  type Dates, type Estimate, type Item, type Milestone, type Project,
 } from './gc';
 
 const FN = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/get-gc-project';
@@ -74,11 +74,17 @@ export default function GcProjectPage() {
   }, [token]);
 
   useEffect(() => { setName(readName()); void load().catch(() => setError('Could not load the project. Check your connection and reload.')); }, [load]);
-  // Stay current while the page is open (techs are checking boxes off all day).
+  // Stay current while the page is open (techs are checking boxes off all day),
+  // and catch up the moment the GC comes back to the tab.
+  useEffect(() => {
+    const back = () => { if (document.visibilityState === 'visible' && inflight.current === 0) void load().catch(() => {}); };
+    document.addEventListener('visibilitychange', back);
+    return () => document.removeEventListener('visibilitychange', back);
+  }, [load]);
   useEffect(() => {
     const t = setInterval(() => {
       if (document.visibilityState === 'visible' && inflight.current === 0) void load().catch(() => {});
-    }, 60000);
+    }, 20000);
     return () => clearInterval(t);
   }, [load]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
@@ -145,7 +151,7 @@ export default function GcProjectPage() {
       <h1 className="pp-title">{p.title}</h1>
       <p className="pp-sub">
         {data.last_field_activity ? `Last field update ${fmtWhen(data.last_field_activity)}` : 'Field work has not started yet'}
-        {' · '}Updates every minute
+        {' · '}Updates live
       </p>
 
       <nav className="pp-nav" ref={navRef}>
@@ -199,10 +205,15 @@ export default function GcProjectPage() {
 
       {tab === 'timeline' && <section id="timeline">
         <div className="pp-band">Timeline</div>
-        <p className="pp-note">Your dates for each floor. Change them any time — our crew plans around them and Shield is notified. Our estimate is based on the boxes left and the crew on site.</p>
+        <p className="pp-note">
+          Moves on its own as our crew checks boxes off — our finish dates come from the boxes still left and the crew on site.
+        </p>
+        <Gantt floors={data.floors} schedule={p.schedule} est={est} />
+        <h2 className="pp-h2">Your dates</h2>
+        <p className="pp-note">Change them any time — our crew plans around them and Shield is notified.</p>
         <div className="pp-card pp-tw">
           <table>
-            <thead><tr><th>Floor</th><th>Our start</th><th>LV inspection</th><th>Drywall</th><th className="n">Our estimate</th><th /></tr></thead>
+            <thead><tr><th>Floor</th><th>Our start</th><th>LV inspection</th><th>Drywall</th><th className="n">We&apos;re done</th><th /></tr></thead>
             <tbody>
               {data.floors.map((f) => <DateRow key={f.code} floor={f} dates={p.schedule[f.code]} est={est.get(f.code)!} busy={busy}
                 onSave={(d) => send('set_floor_dates', { floor_code: f.code, ...d }, `${f.name} dates saved`)} />)}
@@ -326,6 +337,83 @@ function Kpi({ label, value, sub, pct, onClick }: { label: string; value: string
   );
 }
 
+/** Where each floor stands against the GC's dates: what's done, where our forecast lands, today. */
+function Gantt({ floors, schedule, est }: { floors: Project['floors']; schedule: Record<string, Dates>; est: Map<string, Estimate> }) {
+  const today = localDay();
+  const day = (iso: string | null | undefined) => (iso ? localDay(new Date(iso.length > 10 ? iso : `${iso}T12:00:00`)) : null);
+  // The window: earliest start or activity → latest drywall or finish, with today always in view.
+  const marks = floors.flatMap((f) => {
+    const s = schedule[f.code] ?? {};
+    return [s.start, s.inspection, s.drywall, day(f.actual?.started), day(f.actual?.roughed_in), est.get(f.code)?.finish];
+  }).filter(Boolean) as string[];
+  const lo = [today, ...marks].sort()[0];
+  const hiDate = new Date(`${[today, ...marks].sort().pop()}T12:00:00`); hiDate.setDate(hiDate.getDate() + 1);
+  const hi = localDay(hiDate);
+  const t0 = new Date(`${lo}T12:00:00`).getTime();
+  const span = Math.max(1, (new Date(`${hi}T12:00:00`).getTime() - t0) / 864e5 + 1);
+  /** Left edge of a day's column, in % of the track. */
+  const x = (d: string) => (((new Date(`${d}T12:00:00`).getTime() - t0) / 864e5) / span) * 100;
+  const w = (a: string, b: string) => Math.max(100 / span, x(b) - x(a) + 100 / span);
+  /** Today splits at the today line: done work ends there, the forecast starts there. */
+  const now = x(today) + 50 / span;
+  // Week ticks on Mondays (and the first day).
+  const ticks: string[] = [];
+  for (let d = new Date(`${lo}T12:00:00`); localDay(d) <= hi; d.setDate(d.getDate() + 1)) if (d.getDay() === 1 || localDay(d) === lo) ticks.push(localDay(d));
+  return (
+    <div className="pp-card gc-gantt">
+      <div className="gc-g-axis">
+        {ticks.map((t) => <span key={t} style={{ left: `${x(t)}%` }}>{fmtDate(t)}</span>)}
+      </div>
+      {floors.map((f) => {
+        const s = schedule[f.code] ?? {};
+        const e = est.get(f.code);
+        const started = day(f.actual?.started);
+        const doneOn = f.released_at ? day(f.released_at) : day(f.actual?.roughed_in);
+        const workedTo = doneOn ?? (started ? today : null);
+        const status = f.released_at ? { t: `Released ${fmtDate(f.released_at)}`, c: 'ok' }
+          : !e?.finish ? { t: doneOn ? `Roughed in ${fmtDate(doneOn)}` : 'Done', c: 'ok' }
+          : e.late ? { t: s.drywall && today >= s.drywall ? 'Past drywall date' : `At risk — done ${fmtDate(e.finish)}`, c: 'warn' }
+          : e.spare != null ? { t: e.spare === 0 ? `On track — done ${fmtDate(e.finish)}` : `On track — ${e.spare} day${e.spare === 1 ? '' : 's'} to spare`, c: 'ok' }
+          : { t: !started && e.begin && e.begin > today ? `Starts about ${fmtDate(e.begin)}` : `Done about ${fmtDate(e.finish)}`, c: '' };
+        // The forecast runs from when the floor's turn comes (today for the one we're on).
+        const fFrom = e?.begin && e.begin > today ? e.begin : today;
+        return (
+          <div key={f.code} className="gc-g-row">
+            <div className="gc-g-head">
+              <b>{f.name}</b>
+              <span className={`gc-pill ${status.c}`}>{status.t}</span>
+            </div>
+            <div className="gc-g-track">
+              {s.start && s.drywall && s.drywall >= s.start && <i className="gc-g-window" style={{ left: `${x(s.start)}%`, width: `${w(s.start, s.drywall)}%` }} title="Your start → drywall" />}
+              {started && workedTo && <i className={`gc-g-worked ${doneOn ? 'done' : ''}`} style={{ left: `${x(started)}%`, width: `${doneOn ? w(started, workedTo) : Math.max(50 / span, now - x(started))}%` }} />}
+              {e?.finish && <i className={`gc-g-forecast ${e.late ? 'late' : ''}`} style={fFrom === today
+                ? { left: `${now}%`, width: `${Math.max(50 / span, x(e.finish) + 100 / span - now)}%` }
+                : { left: `${x(fFrom)}%`, width: `${w(fFrom, e.finish)}%` }} />}
+              {s.inspection && <i className="gc-g-insp" style={{ left: `${x(s.inspection) + 50 / span}%` }} title={`LV inspection ${fmtDate(s.inspection)}`} />}
+              {s.drywall && <i className="gc-g-dry" style={{ left: `${x(s.drywall)}%` }} title={`Drywall ${fmtDate(s.drywall)}`} />}
+              <i className="gc-g-today" style={{ left: `${now}%` }} />
+            </div>
+            <div className="gc-g-meta">
+              {f.done}/{f.boxes} boxes{started ? ` · started ${fmtDate(started)}` : ''}
+              {s.inspection ? ` · inspection ${fmtDate(s.inspection)}` : ''}
+              {s.drywall ? ` · drywall ${fmtDate(s.drywall)}` : ''}
+              {f.actual?.trimmed ? ` · trimmed out ${fmtDate(f.actual.trimmed)}` : f.actual?.trim_started ? ` · trim-out started ${fmtDate(f.actual.trim_started)}` : ''}
+            </div>
+          </div>
+        );
+      })}
+      <div className="gc-g-legend">
+        <span><i className="gc-g-worked" />Done</span>
+        <span><i className="gc-g-forecast" />Our forecast</span>
+        <span><i className="gc-g-window" />Your start → drywall</span>
+        <span><i className="gc-g-insp" />Inspection</span>
+        <span><i className="gc-g-dry" />Drywall</span>
+        <span><i className="gc-g-today" />Today</span>
+      </div>
+    </div>
+  );
+}
+
 function DateRow({ floor, dates, est, busy, onSave }: {
   floor: Project['floors'][number]; dates: Dates | undefined; est: { finish: string | null; late: boolean }; busy: boolean; onSave: (d: Dates) => Promise<void>;
 }) {
@@ -339,7 +427,7 @@ function DateRow({ floor, dates, est, busy, onSave }: {
       {(['start', 'inspection', 'drywall'] as const).map((k) => (
         <td key={k}><input type="date" className="gc-input" value={d[k] ?? ''} onChange={(e) => set(k, e.target.value)} aria-label={`${floor.name} ${k}`} /></td>
       ))}
-      <td className={`n ${est.late ? 'gc-late' : ''}`}>{floor.released_at ? 'Released' : est.finish ? `${fmtDate(est.finish)}${est.late ? ' · late' : ''}` : 'Done'}</td>
+      <td className={`n ${est.late ? 'gc-late' : ''}`}>{floor.released_at ? 'Released' : est.finish ? `${fmtDate(est.finish)}${est.late ? ' · late' : ''}` : floor.actual?.roughed_in ? `Done ${fmtDate(floor.actual.roughed_in)}` : 'Done'}</td>
       <td>{dirty && <button className="gc-btn sm" disabled={busy} onClick={() => void onSave({ start: d.start ?? '', inspection: d.inspection ?? '', drywall: d.drywall ?? '' }).then(() => setDirty(false), () => {})}>Save</button>}</td>
     </tr>
   );
