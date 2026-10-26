@@ -37,36 +37,42 @@ export const fmtWhen = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 export const localDay = (d = new Date()) => d.toLocaleDateString('en-CA');
 
-/** Adds working days (Mon–Fri). */
-export function addWorkdays(from: Date, days: number): Date {
-  const d = new Date(from);
-  let left = Math.ceil(days);
-  while (left > 0) {
-    d.setDate(d.getDate() + 1);
-    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
-  }
-  return d;
-}
-
 export type Estimate = { days: number; finish: string | null; late: boolean };
+
+const isWorkday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;
+
+/** Half-day slots still left today: both before noon, the afternoon until 3 PM, then none. */
+function slotsLeftToday(now: Date): number {
+  if (!isWorkday(now)) return 0;
+  const h = now.getHours();
+  return h < 12 ? 2 : h < 15 ? 1 : 0;
+}
 
 /**
  * Our estimated rough-in finish per floor. The crew works the floors in plan
- * order, so a floor without its own start date starts when the one before it
- * finishes; a start date in the future waits for that date.
+ * order, in half-day slots on workdays, starting with what's left of today:
+ * a floor without its own start date picks up where the one before it left
+ * off; a start date in the future waits for that date.
  * Days = labor minutes of the boxes not done ÷ (crew × 8 h), in half days.
+ * Late = we'd still be roughing in on (or after) the floor's drywall date.
  */
-export function estimates(floors: Floor[], schedule: Record<string, Dates>, crew: number, today = localDay()): Map<string, Estimate> {
+export function estimates(floors: Floor[], schedule: Record<string, Dates>, crew: number, now = new Date()): Map<string, Estimate> {
   const out = new Map<string, Estimate>();
-  let cursor = `${today}T12:00:00`;
+  // The cursor is a day plus the half-day slots already used on it.
+  let day = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  let used = 2 - slotsLeftToday(now);
   for (const f of floors) {
     const days = Math.ceil(((f.remaining_minutes / 60) / (Math.max(1, crew) * 8)) * 2) / 2;
     const dates = schedule[f.code];
     if (f.released_at || days === 0) { out.set(f.code, { days, finish: null, late: false }); continue; }
-    const start = dates?.start && `${dates.start}T12:00:00` > cursor ? `${dates.start}T12:00:00` : cursor;
-    const finishDate = addWorkdays(new Date(start), days);
-    const finish = localDay(finishDate);
-    cursor = `${finish}T12:00:00`;
+    if (dates?.start && dates.start > localDay(day)) { day = new Date(`${dates.start}T12:00:00`); used = 0; }
+    let slots = days * 2;
+    let finishDay = day;
+    while (slots > 0) {
+      if (used >= 2 || !isWorkday(day)) { day = new Date(day); day.setDate(day.getDate() + 1); used = 0; continue; }
+      used++; slots--; finishDay = day;
+    }
+    const finish = localDay(finishDay);
     out.set(f.code, { days, finish, late: !!dates?.drywall && finish >= dates.drywall });
   }
   return out;

@@ -44,6 +44,8 @@ export default function GcProjectPage() {
   const pendingRun = useRef<((name: string) => Promise<void>) | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Writes still saving — the reload waits for all of them. */
+  const inflight = useRef(0);
   const [toast, setToast] = useState<{ text: string; bad?: boolean } | null>(null);
   const [focus, setFocus] = useState<{ floor: string; locationId: string | null; itemId?: string } | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
@@ -74,29 +76,40 @@ export default function GcProjectPage() {
   useEffect(() => { setName(readName()); void load().catch(() => setError('Could not load the project. Check your connection and reload.')); }, [load]);
   // Stay current while the page is open (techs are checking boxes off all day).
   useEffect(() => {
-    const t = setInterval(() => { if (document.visibilityState === 'visible') void load().catch(() => {}); }, 60000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible' && inflight.current === 0) void load().catch(() => {});
+    }, 60000);
     return () => clearInterval(t);
   }, [load]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
 
-  /** Every write goes through here: asks for the GC's name once, posts, reloads. */
-  const send = useCallback(async (action: string, payload: Record<string, unknown>, ok?: string, who = name) => {
+  /**
+   * Every write goes through here: asks for the GC's name once, posts, reloads.
+   * Check-offs and dates pass `instant` — the page shows the change the moment
+   * it's tapped and saves in the background (a failed save puts it back), and
+   * nothing else on the page locks. The reload waits until no write is still
+   * in flight, so a quick run of check-offs never flickers back.
+   */
+  const send = useCallback(async (action: string, payload: Record<string, unknown>, ok?: string, instant?: (d: Project) => Project) => {
     const run = async (n: string) => {
-      setBusy(true);
+      if (instant) setData((d) => (d ? instant(d) : d)); else setBusy(true);
+      inflight.current++;
       try {
         const r = await fetch(FN_UPDATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, name: n, action, ...payload }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.error ?? 'Could not save that.');
         if (ok) setToast({ text: ok });
-        await load();
       } catch (e) {
-        setToast({ text: (e as Error).message, bad: true });
+        setToast({ text: instant ? `${(e as Error).message} Your change was undone.` : (e as Error).message, bad: true });
         throw e;
       } finally {
-        setBusy(false);
+        inflight.current--;
+        // A failed instant change reloads too — that's what puts it back.
+        if (inflight.current === 0) await load().catch(() => {});
+        if (!instant) setBusy(false);
       }
     };
-    if (!who) {
+    if (!name) {
       // Ask once, then run the write with the typed name.
       return new Promise<void>((resolve, reject) => {
         setNameDraft('');
@@ -104,7 +117,7 @@ export default function GcProjectPage() {
         setAskName(true);
       });
     }
-    return run(who);
+    return run(name);
   }, [token, name, load]);
 
   if (error) return <main className="pp"><div className="pp-err">{error}</div></main>;
@@ -198,7 +211,9 @@ export default function GcProjectPage() {
         </div>
         <h2 className="pp-h2">Milestones</h2>
         <Milestones list={p.milestones} busy={busy}
-          onSave={(m) => send('save_milestone', { milestone: m }, 'Milestone saved')}
+          onSave={(m) => send('save_milestone', { milestone: m }, 'Milestone saved', m.id
+            ? (d) => ({ ...d, plan: { ...d.plan, milestones: d.plan.milestones.map((x) => (x.id === m.id ? m : x)) } })
+            : undefined)}
           onDelete={(m) => send('delete_milestone', { id: m.id }, 'Milestone removed')} />
       </section>}
 
@@ -293,7 +308,11 @@ export default function GcProjectPage() {
   );
 }
 
-type Send = (action: string, payload: Record<string, unknown>, ok?: string) => Promise<void>;
+type Send = (action: string, payload: Record<string, unknown>, ok?: string, instant?: (d: Project) => Project) => Promise<void>;
+
+/** Applies a change to one coordination item, for an instant update. */
+const patchItem = (id: string, patch: Partial<Item>) => (d: Project): Project =>
+  ({ ...d, coordination: d.coordination.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
 
 function Kpi({ label, value, sub, pct, onClick }: { label: string; value: string; sub?: string; pct?: number; onClick?: () => void }) {
   return (
@@ -332,10 +351,10 @@ function Milestones({ list, busy, onSave, onDelete }: { list: Milestone[]; busy:
     <div className="pp-card gc-list">
       {list.map((m) => (
         <div key={m.id} className={`gc-item ${m.done ? 'is-done' : ''}`}>
-          <button className={`gc-check ${m.done ? 'on' : ''}`} aria-label={m.done ? 'Mark not done' : 'Mark done'} disabled={busy}
+          <button className={`gc-check ${m.done ? 'on' : ''}`} aria-label={m.done ? 'Mark not done' : 'Mark done'}
             onClick={() => void onSave({ ...m, done: !m.done }).catch(() => {})}>{m.done ? '✓' : ''}</button>
           <div className="gc-item-body"><div className="gc-item-title">{m.title}</div></div>
-          <input type="date" className="gc-input" value={m.date ?? ''} disabled={busy} onChange={(e) => void onSave({ ...m, date: e.target.value || null }).catch(() => {})} aria-label={`${m.title} date`} />
+          <input type="date" className="gc-input" value={m.date ?? ''} onChange={(e) => void onSave({ ...m, date: e.target.value || null }).catch(() => {})} aria-label={`${m.title} date`} />
           <span className="gc-owner" style={{ background: TRADE_COLOR[m.owner] ?? TRADE_COLOR.Other }}>{m.owner}</span>
           <button className="gc-x" aria-label={`Remove ${m.title}`} disabled={busy} onClick={() => window.confirm(`Remove “${m.title}”?`) && void onDelete(m).catch(() => {})}>×</button>
         </div>
@@ -362,21 +381,26 @@ function Needs({ items, floors, busy, send, showOnPlan }: {
   items: Item[]; floors: Project['floors']; busy: boolean; send: Send; showOnPlan: (floor: string, loc: string | null, item?: string) => void;
 }) {
   const [show, setShow] = useState<'open' | 'all'>('open');
+  // Rows checked off on this visit stay put (struck through) until the filter
+  // changes, so the GC sees what they just did instead of the row vanishing.
+  const [kept, setKept] = useState<Set<string>>(new Set());
+  const keep = useCallback((id: string) => setKept((k) => new Set(k).add(id)), []);
+  const filter = (f: 'open' | 'all') => { setShow(f); setKept(new Set()); };
   const [add, setAdd] = useState({ owner: 'Shield', floor_code: '', title: '', detail: '', due_date: '' });
   const floorName = (c: string) => floors.find((f) => f.code === c)?.name ?? '';
-  const visible = items.filter((i) => show === 'all' || i.status === 'open');
+  const visible = items.filter((i) => show === 'all' || i.status === 'open' || kept.has(i.id));
   const groups = OWNERS.map((o) => ({ owner: o, list: visible.filter((i) => i.owner === o) })).filter((g) => g.list.length);
   return (
     <>
       <div className="gc-seg" role="tablist">
-        <button className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>Open ({items.filter((i) => i.status === 'open').length})</button>
-        <button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>All ({items.length})</button>
+        <button className={show === 'open' ? 'on' : ''} onClick={() => filter('open')}>Open ({items.filter((i) => i.status === 'open').length})</button>
+        <button className={show === 'all' ? 'on' : ''} onClick={() => filter('all')}>All ({items.length})</button>
       </div>
       {groups.length === 0 && <div className="pp-card gc-empty">{items.length ? 'Everything is checked off. Nice work.' : 'Nothing on the list yet.'}</div>}
       {groups.map((g) => (
         <div key={g.owner} className="pp-card gc-list">
           <div className="gc-group"><span className="gc-dot" style={{ background: TRADE_COLOR[g.owner] }} />{g.owner === 'Shield' ? 'Shield (us)' : g.owner}<em>{g.list.length}</em></div>
-          {g.list.map((i) => <NeedRow key={i.id} item={i} floorName={floorName(i.floor_code)} busy={busy} send={send} showOnPlan={showOnPlan} />)}
+          {g.list.map((i) => <NeedRow key={i.id} item={i} floorName={floorName(i.floor_code)} busy={busy} send={send} keep={keep} showOnPlan={showOnPlan} />)}
         </div>
       ))}
       <form className="pp-card gc-add col" onSubmit={(e) => {
@@ -404,8 +428,8 @@ function Needs({ items, floors, busy, send, showOnPlan }: {
   );
 }
 
-function NeedRow({ item: i, floorName, busy, send, showOnPlan }: {
-  item: Item; floorName: string; busy: boolean; send: Send; showOnPlan: (floor: string, loc: string | null, item?: string) => void;
+function NeedRow({ item: i, floorName, busy, send, keep, showOnPlan }: {
+  item: Item; floorName: string; busy: boolean; send: Send; keep: (id: string) => void; showOnPlan: (floor: string, loc: string | null, item?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState(i.note);
@@ -414,8 +438,12 @@ function NeedRow({ item: i, floorName, busy, send, showOnPlan }: {
   const overdue = !done && i.due_date && i.due_date < localDay();
   return (
     <div className={`gc-item ${done ? 'is-done' : ''}`}>
-      <button className={`gc-check ${done ? 'on' : ''}`} aria-label={done ? 'Mark open' : 'Mark done'} disabled={busy}
-        onClick={() => void send('set_item_status', { id: i.id, done: !done }, done ? 'Reopened' : 'Marked done').catch(() => {})}>{done ? '✓' : ''}</button>
+      <button className={`gc-check ${done ? 'on' : ''}`} aria-label={done ? 'Mark open' : 'Mark done'}
+        onClick={() => {
+          keep(i.id);
+          void send('set_item_status', { id: i.id, done: !done }, done ? 'Reopened' : 'Marked done',
+            patchItem(i.id, done ? { status: 'open', done_at: null, done_by: null } : { status: 'done', done_at: new Date().toISOString() })).catch(() => {});
+        }}>{done ? '✓' : ''}</button>
       <div className="gc-item-body">
         <div className="gc-item-title">{i.title}</div>
         <div className="gc-item-meta">
@@ -443,8 +471,9 @@ function NeedRow({ item: i, floorName, busy, send, showOnPlan }: {
           </div>
         )}
       </div>
-      <input type="date" className={`gc-input ${overdue ? 'gc-late' : ''}`} value={i.due_date ?? ''} disabled={busy}
-        onChange={(e) => void send('set_item_date', { id: i.id, due_date: e.target.value || null }, 'Due date saved').catch(() => {})} aria-label={`${i.title} due date`} />
+      <input type="date" className={`gc-input ${overdue ? 'gc-late' : ''}`} value={i.due_date ?? ''}
+        onChange={(e) => void send('set_item_date', { id: i.id, due_date: e.target.value || null }, 'Due date saved',
+          patchItem(i.id, { due_date: e.target.value || null })).catch(() => {})} aria-label={`${i.title} due date`} />
     </div>
   );
 }
