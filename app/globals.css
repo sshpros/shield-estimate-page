@@ -396,3 +396,27 @@ input.gc-late{border-color:var(--amber);}
 .gc-kpi.tap{cursor:pointer;transition:border-color .15s;}
 .gc-kpi.tap:hover{border-color:var(--blue);}
 .gc-activity .gc-more{display:block;margin:.6rem 0 0;}
+
+/* GC timeline (2026-10-26): per-floor bars against the GC's dates. */
+.gc-gantt{padding:.6rem .9rem .8rem;}
+.gc-g-axis{position:relative;overflow:hidden;height:1.1rem;font-size:.68rem;color:var(--text-3);border-bottom:1px solid var(--border-soft);margin-bottom:.2rem;}
+.gc-g-axis span{position:absolute;top:0;white-space:nowrap;transform:translateX(-2px);}
+.gc-g-row{padding:.6rem 0;border-bottom:1px solid var(--border-soft);}
+.gc-g-row:last-of-type{border-bottom:none;}
+.gc-g-head{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;}
+.gc-g-track{position:relative;height:18px;margin-top:.45rem;border-radius:6px;background:var(--surface-2);}
+.gc-g-track i{position:absolute;top:0;height:100%;}
+.gc-g-window{border:1.5px dashed var(--border-strong);border-radius:6px;box-sizing:border-box;}
+.gc-g-worked{top:4px!important;height:10px!important;border-radius:5px;background:var(--link);}
+.gc-g-worked.done{background:var(--green);}
+.gc-g-forecast{top:4px!important;height:10px!important;border-radius:5px;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--link) 55%,transparent) 0 4px,transparent 4px 7px);border:1px solid color-mix(in srgb,var(--link) 70%,transparent);box-sizing:border-box;}
+.gc-g-forecast.late{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--amber) 60%,transparent) 0 4px,transparent 4px 7px);border-color:var(--amber);}
+.gc-g-insp{width:10px;height:10px!important;top:4px!important;margin-left:-5px;background:var(--violet);transform:rotate(45deg);border-radius:2px;}
+.gc-g-dry{width:3px;margin-left:-1px;background:var(--red);border-radius:2px;}
+.gc-g-today{width:2px;margin-left:-1px;top:-4px!important;height:26px!important;background:var(--text);opacity:.55;}
+.gc-g-meta{font-size:.78rem;color:var(--text-3);margin-top:.35rem;}
+.gc-g-legend{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-top:.7rem;font-size:.72rem;color:var(--text-3);}
+.gc-g-legend span{display:inline-flex;align-items:center;gap:.35rem;}
+.gc-g-legend i{position:relative;display:inline-block;width:18px;height:10px!important;top:0!important;margin:0;}
+.gc-g-legend .gc-g-insp{width:9px;height:9px!important;}
+.gc-g-legend .gc-g-dry,.gc-g-legend .gc-g-today{width:3px;height:12px!important;}

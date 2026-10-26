@@ -5,7 +5,10 @@ export type Milestone = { id: string; title: string; date: string | null; owner:
 export type Sheet = { design_plan_id: string; floor_code: string; floor_name: string; url: string; w: number; h: number; src_w: number; src_h: number };
 export type Floor = {
   code: string; name: string; boxes: number; done: number; pulled: number; trimmed: number; remaining_minutes: number;
-  released_at: string | null; rooms: { code: string; name: string; boxes: number; done: number }[];
+  released_at: string | null;
+  /** What really happened, from the field: first pull/box, last box, trim. */
+  actual: { started: string | null; roughed_in: string | null; trim_started: string | null; trimmed: string | null };
+  rooms: { code: string; name: string; boxes: number; done: number }[];
   walls: { room_code: string; wall: string; url: string }[];
 };
 export type Loc = {
@@ -37,9 +40,25 @@ export const fmtWhen = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 export const localDay = (d = new Date()) => d.toLocaleDateString('en-CA');
 
-export type Estimate = { days: number; finish: string | null; late: boolean };
+export type Estimate = {
+  days: number; finish: string | null; late: boolean;
+  /** First day we expect to work this floor (it waits its turn in plan order). */
+  begin: string | null;
+  /** Workdays between our finish and drywall (negative = late). */
+  spare: number | null;
+};
 
 const isWorkday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;
+
+/** Workdays from `a` to `b` (yyyy-mm-dd), counting b but not a; negative when b is before a. */
+export function workdaysBetween(a: string, b: string): number {
+  const sign = b >= a ? 1 : -1;
+  const [lo, hi] = sign > 0 ? [a, b] : [b, a];
+  const d = new Date(`${lo}T12:00:00`);
+  let n = 0;
+  while (localDay(d) < hi) { d.setDate(d.getDate() + 1); if (isWorkday(d)) n++; }
+  return sign * n;
+}
 
 /** Half-day slots still left today: both before noon, the afternoon until 3 PM, then none. */
 function slotsLeftToday(now: Date): number {
@@ -53,27 +72,33 @@ function slotsLeftToday(now: Date): number {
  * order, in half-day slots on workdays, starting with what's left of today:
  * a floor without its own start date picks up where the one before it left
  * off; a start date in the future waits for that date.
- * Days = labor minutes of the boxes not done ÷ (crew × 8 h), in half days.
+ * Days = labor minutes of the boxes not done ÷ a day's work, in half days.
+ * A day's work is our real pace once we have two days on site, else the
+ * plan (crew × 8 h) — so the dates move as the crew checks boxes off.
  * Late = we'd still be roughing in on (or after) the floor's drywall date.
  */
-export function estimates(floors: Floor[], schedule: Record<string, Dates>, crew: number, now = new Date()): Map<string, Estimate> {
+export function estimates(floors: Floor[], schedule: Record<string, Dates>, crew: number, now = new Date(),
+  minutesPerDay: number | null = null): Map<string, Estimate> {
+  const perDay = minutesPerDay && minutesPerDay > 0 ? minutesPerDay : Math.max(1, crew) * 8 * 60;
   const out = new Map<string, Estimate>();
   // The cursor is a day plus the half-day slots already used on it.
   let day = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
   let used = 2 - slotsLeftToday(now);
   for (const f of floors) {
-    const days = Math.ceil(((f.remaining_minutes / 60) / (Math.max(1, crew) * 8)) * 2) / 2;
+    const days = Math.ceil((f.remaining_minutes / perDay) * 2) / 2;
     const dates = schedule[f.code];
-    if (f.released_at || days === 0) { out.set(f.code, { days, finish: null, late: false }); continue; }
+    if (f.released_at || days === 0) { out.set(f.code, { days, finish: null, late: false, begin: null, spare: null }); continue; }
     if (dates?.start && dates.start > localDay(day)) { day = new Date(`${dates.start}T12:00:00`); used = 0; }
     let slots = days * 2;
     let finishDay = day;
+    let beginDay: Date | null = null;
     while (slots > 0) {
       if (used >= 2 || !isWorkday(day)) { day = new Date(day); day.setDate(day.getDate() + 1); used = 0; continue; }
-      used++; slots--; finishDay = day;
+      used++; slots--; finishDay = day; beginDay ??= day;
     }
     const finish = localDay(finishDay);
-    out.set(f.code, { days, finish, late: !!dates?.drywall && finish >= dates.drywall });
+    const spare = dates?.drywall ? workdaysBetween(finish, dates.drywall) - 1 : null;
+    out.set(f.code, { days, finish, late: !!dates?.drywall && finish >= dates.drywall, begin: beginDay ? localDay(beginDay) : finish, spare });
   }
   return out;
 }
