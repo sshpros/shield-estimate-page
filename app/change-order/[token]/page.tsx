@@ -13,6 +13,18 @@ type Addition = {
   total: number;
 };
 
+/** A change to an existing invoice line — "4 → 5", "$1,200 → $1,800" (Kyle 2026-10-28). */
+type Change = {
+  description: string;
+  old_quantity: number;
+  new_quantity: number;
+  old_unit_price: number;
+  new_unit_price: number;
+  old_total: number;
+  new_total: number;
+  delta: number;
+};
+
 type InvoiceItem = {
   description: string;
   category: string;
@@ -21,7 +33,21 @@ type InvoiceItem = {
   total: number;
   is_recurring: boolean;
   removed: boolean;
+  /** Changed in place by this change order (shown with its new values). */
+  changing?: boolean;
 };
+
+/** "Qty 4 → 5 (+1)", "$1,200.00 → $1,800.00 each". */
+function changeText(c: Change): string {
+  const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const parts: string[] = [];
+  if (c.new_quantity !== c.old_quantity) {
+    const d = c.new_quantity - c.old_quantity;
+    parts.push(`Qty ${c.old_quantity} → ${c.new_quantity} (${d > 0 ? '+' : ''}${d})`);
+  }
+  if (Math.abs(c.new_unit_price - c.old_unit_price) > 0.004) parts.push(`${money(c.old_unit_price)} → ${money(c.new_unit_price)} each`);
+  return parts.join(' · ') || 'Updated';
+}
 
 type ChangeOrderData = {
   change_order: {
@@ -31,6 +57,8 @@ type ChangeOrderData = {
     notes: string;
     net_amount_delta: number;
     created_by_name: string;
+    /** Absent from servers before 2026-10-28. */
+    changes?: Change[];
     additions: Addition[];
   };
   invoice: {
@@ -158,6 +186,8 @@ export default function ChangeOrderPage() {
 
   const co = data.change_order;
   const inv = data.invoice;
+  // Once applied, a change's line already holds the new values — nothing left to show.
+  const changes = (co.changes ?? []).filter((c) => c.old_quantity !== c.new_quantity || Math.abs(c.old_unit_price - c.new_unit_price) > 0.004 || Math.abs(c.delta) > 0.004);
   const resolvedStatus = outcome?.status ?? co.status;
   const isResolved = ['Applied', 'Declined', 'Voided'].includes(resolvedStatus);
   const paymentUrl = outcome?.payment_url ?? inv.payment_url;
@@ -220,6 +250,17 @@ export default function ChangeOrderPage() {
 
       <div className="card">
         <div className="card-title">What&apos;s Changing</div>
+        {changes.map((c, i) => (
+          <div className="info-row" key={`chg-${i}`}>
+            <span>
+              {c.description}
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-3)' }}>{changeText(c)}</span>
+            </span>
+            <span style={{ color: c.delta >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+              {c.delta >= 0 ? '+' : '−'}{fmt(Math.abs(c.delta))}
+            </span>
+          </div>
+        ))}
         {co.additions.map((a, i) => (
           <div className="info-row" key={`add-${i}`}>
             <span style={{ color: 'var(--green)' }}>
@@ -238,7 +279,7 @@ export default function ChangeOrderPage() {
               <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{fmt(li.total)}</span>
             </div>
           ))}
-        {co.additions.length === 0 && !inv.line_items.some((li) => li.removed) && (
+        {co.additions.length === 0 && changes.length === 0 && !inv.line_items.some((li) => li.removed) && (
           <div style={{ color: 'var(--text-3)', padding: '8px 0' }}>No line-item changes.</div>
         )}
       </div>
@@ -246,7 +287,7 @@ export default function ChangeOrderPage() {
       <div className="card">
         <div className="card-title">Your Invoice After This Change</div>
         {inv.line_items
-          .filter((li) => !li.is_recurring)
+          .filter((li) => !li.is_recurring && !li.changing)
           .map((li, i) => (
             <div className="info-row" key={`cur-${i}`}>
               <span
@@ -270,6 +311,14 @@ export default function ChangeOrderPage() {
               </span>
             </div>
           ))}
+        {changes.map((c, i) => (
+          <div className="info-row" key={`chgd-${i}`}>
+            <span>
+              {c.new_quantity} × {c.description} <span style={{ fontSize: 11, color: 'var(--text-3)' }}>(changed)</span>
+            </span>
+            <span className="info-value">{fmt(c.new_total)}</span>
+          </div>
+        ))}
         {co.additions.map((a, i) => (
           <div className="info-row" key={`new-${i}`}>
             <span style={{ color: 'var(--green)' }}>
