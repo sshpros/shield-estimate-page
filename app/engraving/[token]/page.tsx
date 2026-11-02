@@ -324,7 +324,9 @@ function Faceplate({ layout, face, ink, metal, labels, pt, onTap }: {
   layout: Keypad['layout']; face: string; ink: string; metal: boolean; labels: string[]; pt: 11 | 14; onTap: (i: number) => void;
 }) {
   return (
-    <div className={`en-plate${metal ? ' metal' : ''}`} style={{ ['--face' as string]: face, ['--ink' as string]: ink }} aria-hidden="true">
+    <div className={`en-plate${metal ? ' metal' : ''}`} aria-hidden="true"
+      style={{ ['--face' as string]: face, ['--ink' as string]: ink,
+        ['--rows' as string]: `repeat(${labels.length}, minmax(0, 1fr))${layout === '3RL' ? ' minmax(0, 0.5fr)' : ''}` }}>
       <div className="en-buttons">
         {labels.map((l, i) => (
           <button key={i} type="button" tabIndex={-1} className="en-btnface" onClick={() => onTap(i)}>
