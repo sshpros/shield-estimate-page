@@ -35,7 +35,7 @@ const FIT: Record<11 | 14, { chars: number; lines: number }> = { 11: { chars: 14
 
 // Faceplate colors for the common Palladiom finishes (button + faceplate match).
 const FINISHES: Record<string, { face: string; ink: string; metal?: boolean }> = {
-  white: { face: '#f3f2ee', ink: '#9a9a96' }, almond: { face: '#ece3d2', ink: '#988f7f' }, beige: { face: '#e4d9c6', ink: '#8f8473' },
+  white: { face: '#efeeea', ink: '#7d7e80' }, almond: { face: '#ebe3d3', ink: '#7f776a' }, beige: { face: '#e4d9c6', ink: '#8f8473' },
   taupe: { face: '#b9ac9c', ink: '#f5f1ea' }, gray: { face: '#8f9094', ink: '#f2f2f2' }, brown: { face: '#5a4636', ink: '#eadfd2' },
   black: { face: '#222224', ink: '#e9e9ea' }, 'satin nickel': { face: '#c7c5bf', ink: '#f8f8f6', metal: true },
   'bright nickel': { face: '#d4d4d2', ink: '#ffffff', metal: true }, 'satin chrome': { face: '#c9ccd0', ink: '#ffffff', metal: true },
@@ -245,6 +245,7 @@ export default function EngravingPage() {
                   <div className="en-kp-body">
                     <Faceplate layout={k.layout} face={f.face} ink={f.ink} metal={!!f.metal} pt={pt}
                       labels={d.labels.map((l) => applyCase(l, textCase))}
+                      ghosts={d.labels.map((_, i) => applyCase(k.suggestions?.[i] ?? '', textCase))}
                       onTap={(i) => inputRefs.current[`${k.id}-${i}`]?.focus()} />
                     <div className="en-fields">
                       {d.labels.map((label, i) => {
@@ -319,23 +320,22 @@ export default function EngravingPage() {
   );
 }
 
-/** A Palladiom keypad face: stacked buttons with the engraving preview. */
-function Faceplate({ layout, face, ink, metal, labels, pt, onTap }: {
-  layout: Keypad['layout']; face: string; ink: string; metal: boolean; labels: string[]; pt: 11 | 14; onTap: (i: number) => void;
+/** A Palladiom keypad face, drawn to Lutron's proportions. */
+function Faceplate({ layout, face, ink, metal, labels, ghosts, pt, onTap }: {
+  layout: Keypad['layout']; face: string; ink: string; metal: boolean; labels: string[]; ghosts: string[]; pt: 11 | 14; onTap: (i: number) => void;
 }) {
   return (
     <div className={`en-plate${metal ? ' metal' : ''}`} aria-hidden="true"
       style={{ ['--face' as string]: face, ['--ink' as string]: ink,
-        ['--rows' as string]: `repeat(${labels.length}, minmax(0, 1fr))${layout === '3RL' ? ' minmax(0, 0.5fr)' : ''}` }}>
-      <div className="en-buttons">
+        ['--rows' as string]: `repeat(${labels.length}, minmax(0, 1fr))${layout === '3RL' ? ' minmax(0, 0.45fr)' : ''}` }}>
+      <div className="en-col">
         {labels.map((l, i) => (
           <button key={i} type="button" tabIndex={-1} className="en-btnface" onClick={() => onTap(i)}>
-            <span className="en-engr" style={{ fontSize: pt === 14 ? '0.98rem' : '0.78rem' }}>{l || ' '}</span>
+            {/* A blank button shows its suggestion faintly until it's filled in. */}
+            <span className={`en-engr pt${pt}${l ? '' : ' ghost'}`}>{l || ghosts[i] || '\u00a0'}</span>
           </button>
         ))}
-        {layout === '3RL' ? (
-          <div className="en-rl"><button type="button" tabIndex={-1}>▾</button><button type="button" tabIndex={-1}>▴</button></div>
-        ) : null}
+        {layout === '3RL' ? <div className="en-rl"><span>&#9662;</span><span>&#9652;</span></div> : null}
       </div>
     </div>
   );
