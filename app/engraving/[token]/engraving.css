@@ -27,6 +27,7 @@
 .en-banner { margin: 14px 0 22px; padding: 14px 16px; border-radius: var(--en-radius); line-height: 1.5; border: 1px solid var(--border-strong); background: var(--card); }
 .en-banner.done { border-color: color-mix(in srgb, var(--green) 45%, transparent); }
 .en-banner.done b { color: var(--green); }
+.en-pdf { display: inline-block; margin-top: 12px; text-decoration: none; }
 
 .en-empty { margin-top: 18px; padding: 28px 22px; border: 1px dashed var(--border-strong); border-radius: var(--en-radius); background: var(--card); }
 .en-empty h2 { margin: 0 0 6px; font-size: 18px; }
