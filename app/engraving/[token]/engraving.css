@@ -91,9 +91,12 @@
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
 }
 .en-btnface {
-  min-height: 0; overflow: hidden; display: block; text-align: left; border: 0; cursor: pointer;
+  /* Buttons center their content by default; the engraving sits top-left
+     (inset measured from Lutron's product photo). */
+  min-height: 0; overflow: hidden; display: flex; align-items: flex-start; justify-content: flex-start;
+  text-align: left; border: 0; cursor: pointer;
   background: linear-gradient(180deg, color-mix(in srgb, var(--face) 97%, #fff) 0%, var(--face) 100%);
-  padding: 3.6cqh 0 0 8.5cqw;
+  padding: 2cqh 2cqw 0 3.8cqw;
 }
 .en-plate.metal .en-btnface { background: linear-gradient(170deg, color-mix(in srgb, var(--face) 85%, #fff), var(--face)); }
 .en-engr {
