@@ -57,10 +57,6 @@
 .en-save.saved { color: var(--green); }
 .en-save.error { color: var(--red); }
 .en-kp-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; }
-@media (max-width: 560px) {
-  .en-kp-body { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .en-plate { width: min(210px, 62%); justify-self: center; position: relative; top: 0; }
-}
 
 /* Faceplate, drawn from Lutron's product photos (HQWT-U-P4W): a 2.95" ×
    4.69" plate with the buttons in one narrow outlined column — about 43%
@@ -76,6 +72,12 @@
     radial-gradient(120% 80% at 30% 15%, color-mix(in srgb, var(--face) 92%, #fff) 0%, transparent 60%),
     linear-gradient(170deg, color-mix(in srgb, var(--face) 96%, #fff) 0%, var(--face) 55%, color-mix(in srgb, var(--face) 93%, #000) 100%);
   box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.08), 0 10px 22px -6px rgba(0,0,0,.28);
+}
+/* Phones: the keypad sits above its fields at a readable size. Kept after
+   the base .en-plate rule so it wins. */
+@media (max-width: 560px) {
+  .en-kp-body { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .en-plate { width: min(210px, 62%); justify-self: center; position: relative; top: 0; }
 }
 .en-plate.metal {
   background: linear-gradient(165deg, color-mix(in srgb, var(--face) 78%, #fff) 0%, var(--face) 42%, color-mix(in srgb, var(--face) 84%, #000) 100%);
