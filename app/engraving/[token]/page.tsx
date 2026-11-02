@@ -12,6 +12,8 @@ import { useParams } from 'next/navigation';
 
 const FN = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/get-engraving';
 const FN_SAVE = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/submit-engraving';
+/** Lutron engraving-report PDF — marked DRAFT until the request is submitted. */
+const FN_PDF = 'https://fzzpdojbuwgmylmadupm.supabase.co/functions/v1/engraving-pdf';
 const PHONE = '(928) 843-7767';
 
 type TextCase = 'title' | 'caps' | 'lower' | 'free';
@@ -184,6 +186,7 @@ export default function EngravingPage() {
         <section className="en-banner done">
           <b>Submitted{r.submitted_by ? ` by ${r.submitted_by}` : ''}{r.submitted_at ? ` on ${new Date(r.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : ''}.</b>
           <span> We&rsquo;re ordering your engraved buttons from Lutron. To change anything, call or text Shield at <span className="en-sel">{PHONE}</span>.</span>
+          <a className="en-btn en-pdf" href={`${FN_PDF}?token=${token}`} target="_blank" rel="noopener">Download PDF</a>
         </section>
       ) : data.keypads.length > 0 ? (
         <p className="en-lede">
@@ -294,6 +297,7 @@ export default function EngravingPage() {
                   : 'Every button has a label.'}
                 {' '}Once you submit, we order the engraved buttons from Lutron and the list can&rsquo;t be changed here.
               </p>
+              <a className="en-link" href={`${FN_PDF}?token=${token}`} target="_blank" rel="noopener">Preview the order sheet (PDF)</a>
               <label htmlFor="en-name">Your name</label>
               <input id="en-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="First and last name" autoComplete="name" />
               {confirming ? (
