@@ -143,7 +143,7 @@ type EstimateResponse = {
 };
 
 const DEFAULT_LOGO_URL =
-  'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo-3d.png?v=7';
+  'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/brand/shield-lockup-v2.png';
 const PAYMENT_PAGE_URL =
   process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL || 'https://shield-payment-page.vercel.app';
 

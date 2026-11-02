@@ -75,7 +75,7 @@ type ChangeOrderData = {
 };
 
 const LOGO_URL =
-  'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/logo-3d.png?v=7';
+  'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/brand/shield-lockup-v2.png';
 
 const DECLINE_REASONS = [
   'Price too high',
