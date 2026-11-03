@@ -54,6 +54,14 @@ function applyCase(s: string, c: TextCase): string {
   return s;
 }
 
+/** Grow a textarea to fit its text (Kyle 2026-11-03: long keypad notes were
+ *  stuck in a one-line box you had to scroll). */
+function fitHeight(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+}
+
 function fitIssue(label: string, pt: 11 | 14): string | null {
   const lines = label.split('\n');
   const f = FIT[pt];
@@ -267,7 +275,8 @@ export default function EngravingPage() {
                       {k.layout === '3RL' ? <p className="en-fine">The raise / lower buttons at the bottom aren&rsquo;t engraved.</p> : null}
                       <div className="en-field">
                         <label htmlFor={`${k.id}-note`}>Notes for this keypad (optional)</label>
-                        <textarea id={`${k.id}-note`} rows={1} value={d.note} readOnly={locked} placeholder="Anything we should know"
+                        <textarea id={`${k.id}-note`} rows={2} value={d.note} readOnly={locked} placeholder="Anything we should know"
+                          className="en-note" ref={fitHeight} onInput={(e) => fitHeight(e.currentTarget)}
                           onChange={(e) => edit(k, 'note', e.target.value)} maxLength={500} />
                       </div>
                       {!locked && k.suggestions?.some(Boolean) && d.labels.some((l) => !l.trim()) ? (
