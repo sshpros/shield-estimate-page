@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import type SignatureCanvasType from 'react-signature-canvas';
+import { LineIcon } from '../lineIcon';
 
 type LineItem = {
   name: string;
@@ -15,6 +16,8 @@ type LineItem = {
   section_name?: string | null;
   unit_type?: string | null;
   is_recurring?: boolean | null;
+  category?: string | null;
+  part_number?: string | null;
   primary_image_url?: string | null;
   gallery_image_urls?: string[];
   manufacturer?: string | null;
@@ -262,7 +265,7 @@ export default function EstimatePage() {
                     style={{ cursor: 'zoom-in' }}
                   />
                 ) : (
-                  <div className="equipment-img-placeholder">📦</div>
+                  <LineIcon item={item} />
                 )}
                 <div className="equipment-details">
                   <div className="equipment-name">{item.name}</div>
