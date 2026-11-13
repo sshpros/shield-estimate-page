@@ -10,6 +10,9 @@ type Addition = {
   part_number: string;
   quantity: number;
   unit_price: number;
+  /** Priced under retail: shown as retail minus this (Kyle 2026-11-13). */
+  discount_amount?: number;
+  discount_reason?: string | null;
   total: number;
 };
 
@@ -36,6 +39,14 @@ type InvoiceItem = {
   /** Changed in place by this change order (shown with its new values). */
   changing?: boolean;
 };
+
+/** "1 × $799.00 · −$212.00 discount" for a new item, when it's discounted. */
+function additionPricing(a: Addition): string | null {
+  const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  if (!a.discount_amount || a.discount_amount < 0.005) return null;
+  const why = a.discount_reason && a.discount_reason !== 'Discount' ? ` (${a.discount_reason})` : '';
+  return `${a.quantity} × ${money(a.unit_price)} · −${money(a.discount_amount)} discount${why}`;
+}
 
 /** "Qty 4 → 5 (+1)", "$1,200.00 → $1,800.00 each". */
 function changeText(c: Change): string {
@@ -250,7 +261,7 @@ export default function ChangeOrderPage() {
 
       <div className="card">
         <div className="card-title">What&apos;s Changing</div>
-        {changes.map((c, i) => (
+        {changes.filter((c) => c.delta >= -0.004).map((c, i) => (
           <div className="info-row" key={`chg-${i}`}>
             <span>
               {c.description}
@@ -265,8 +276,19 @@ export default function ChangeOrderPage() {
           <div className="info-row" key={`add-${i}`}>
             <span style={{ color: 'var(--green)' }}>
               + {a.quantity} × {a.description}
+              {additionPricing(a) && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-3)' }}>{additionPricing(a)}</span>}
             </span>
             <span style={{ color: 'var(--green)', fontWeight: 600 }}>{fmt(a.total)}</span>
+          </div>
+        ))}
+        {/* A change that lowers the price (6 → 5) reads as a removal (Kyle 2026-11-13). */}
+        {changes.filter((c) => c.delta < -0.004).map((c, i) => (
+          <div className="info-row" key={`red-${i}`}>
+            <span style={{ color: 'var(--red)' }}>
+              − {c.description}
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-3)' }}>{changeText(c)}</span>
+            </span>
+            <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{fmt(Math.abs(c.delta))}</span>
           </div>
         ))}
         {inv.line_items
@@ -323,6 +345,7 @@ export default function ChangeOrderPage() {
           <div className="info-row" key={`new-${i}`}>
             <span style={{ color: 'var(--green)' }}>
               {a.quantity} × {a.description} <span style={{ fontSize: 11 }}>(new)</span>
+              {additionPricing(a) && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-3)' }}>{additionPricing(a)}</span>}
             </span>
             <span className="info-value" style={{ color: 'var(--green)' }}>
               {fmt(a.total)}
