@@ -60,6 +60,26 @@ function changeText(c: Change): string {
   return parts.join(' · ') || 'Updated';
 }
 
+/** Dispatch fee / discount change (Kyle 2026-11-13); dispatch isn't a line item. */
+type DispatchChange = {
+  old_fee: number;
+  old_discount: number;
+  old_net: number;
+  new_fee: number;
+  new_discount: number;
+  new_net: number;
+  delta: number;
+  reason: string | null;
+};
+
+function dispatchText(d: DispatchChange): string {
+  const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  let t = `${money(d.old_net)} → ${money(d.new_net)}`;
+  if (d.new_discount > 0.004) t += ` · −${money(d.new_discount)} discount`;
+  if (d.reason) t += ` (${d.reason})`;
+  return t;
+}
+
 type ChangeOrderData = {
   change_order: {
     number: string;
@@ -71,6 +91,7 @@ type ChangeOrderData = {
     /** Absent from servers before 2026-10-28. */
     changes?: Change[];
     additions: Addition[];
+    dispatch_change?: DispatchChange | null;
   };
   invoice: {
     invoice_id: string;
@@ -78,6 +99,9 @@ type ChangeOrderData = {
     invoice_number: string;
     customer_name: string;
     line_items: InvoiceItem[];
+    /** Net dispatch before/after the change (absent on older servers). */
+    dispatch_before?: number;
+    dispatch_after?: number;
     total_before: number;
     total_after: number;
     tax_rate: number;
@@ -198,6 +222,7 @@ export default function ChangeOrderPage() {
   const co = data.change_order;
   const inv = data.invoice;
   // Once applied, a change's line already holds the new values — nothing left to show.
+  const dc = co.dispatch_change ?? null;
   const changes = (co.changes ?? []).filter((c) => c.old_quantity !== c.new_quantity || Math.abs(c.old_unit_price - c.new_unit_price) > 0.004 || Math.abs(c.delta) > 0.004);
   const resolvedStatus = outcome?.status ?? co.status;
   const isResolved = ['Applied', 'Declined', 'Voided'].includes(resolvedStatus);
@@ -272,6 +297,15 @@ export default function ChangeOrderPage() {
             </span>
           </div>
         ))}
+        {dc && dc.delta >= -0.004 && (
+          <div className="info-row">
+            <span>
+              Dispatch &mdash; Trip &amp; service call
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-3)' }}>{dispatchText(dc)}</span>
+            </span>
+            <span style={{ color: 'var(--green)', fontWeight: 600 }}>+{fmt(Math.abs(dc.delta))}</span>
+          </div>
+        )}
         {co.additions.map((a, i) => (
           <div className="info-row" key={`add-${i}`}>
             <span style={{ color: 'var(--green)' }}>
@@ -291,6 +325,15 @@ export default function ChangeOrderPage() {
             <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{fmt(Math.abs(c.delta))}</span>
           </div>
         ))}
+        {dc && dc.delta < -0.004 && (
+          <div className="info-row">
+            <span style={{ color: 'var(--red)' }}>
+              − Dispatch &mdash; Trip &amp; service call
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-3)' }}>{dispatchText(dc)}</span>
+            </span>
+            <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{fmt(Math.abs(dc.delta))}</span>
+          </div>
+        )}
         {inv.line_items
           .filter((li) => li.removed)
           .map((li, i) => (
@@ -301,7 +344,7 @@ export default function ChangeOrderPage() {
               <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{fmt(li.total)}</span>
             </div>
           ))}
-        {co.additions.length === 0 && changes.length === 0 && !inv.line_items.some((li) => li.removed) && (
+        {co.additions.length === 0 && changes.length === 0 && !dc && !inv.line_items.some((li) => li.removed) && (
           <div style={{ color: 'var(--text-3)', padding: '8px 0' }}>No line-item changes.</div>
         )}
       </div>
@@ -341,6 +384,15 @@ export default function ChangeOrderPage() {
             <span className="info-value">{fmt(c.new_total)}</span>
           </div>
         ))}
+        {(inv.dispatch_after ?? 0) > 0.004 && (
+          <div className="info-row">
+            <span>
+              Dispatch &mdash; Trip &amp; service call
+              {dc && <span style={{ fontSize: 11, color: 'var(--text-3)' }}> (changed)</span>}
+            </span>
+            <span className="info-value">{fmt(inv.dispatch_after ?? 0)}</span>
+          </div>
+        )}
         {co.additions.map((a, i) => (
           <div className="info-row" key={`new-${i}`}>
             <span style={{ color: 'var(--green)' }}>
