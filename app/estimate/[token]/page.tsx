@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import type SignatureCanvasType from 'react-signature-canvas';
 import { LineIcon } from '../lineIcon';
+import { normId, upgradeInfo, type UpgradeInfo } from '../upgrades';
 
 type LineItem = {
+  /** Line id — upgrade sections name the base lines they replace by id. */
+  id?: string | null;
   name: string;
   quantity: number;
   unit_price: number;
@@ -125,7 +128,7 @@ type EstimateResponse = {
   /** Shared (non-tiered) labor with the crew math, from the edge function. */
   labor?: LaborInfo | null;
   line_items?: LineItem[] | null;
-  estimate_sections?: { name: string; isReference?: boolean; customerAddable?: boolean }[] | null;
+  estimate_sections?: { name: string; isReference?: boolean; customerAddable?: boolean; replacesItemIds?: string[] | null }[] | null;
   logo_url?: string | null;
   expired?: boolean;
   is_tiered?: boolean;
@@ -248,13 +251,20 @@ export default function EstimatePage() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0);
 
-  const renderEquipmentRow = (item: LineItem, i: number) => {
+  const renderEquipmentRow = (item: LineItem, i: number, replacedBy?: string) => {
     const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
     const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
     const lineTotal = item.total ?? (grossTotal - itemDiscount);
     const gallery = (item.gallery_image_urls ?? []).filter(Boolean);
     return (
-      <div key={i}>
+      // A base line swapped out by an added upgrade stays visible, dimmed and
+      // struck through, so the customer sees what the upgrade replaced.
+      <div key={i} style={replacedBy ? { opacity: 0.5 } : undefined}>
+              {replacedBy && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', margin: '8px 0 -4px' }}>
+                  ⇄ Replaced by {replacedBy}
+                </div>
+              )}
               <div className="equipment-item">
                 {item.primary_image_url ? (
                   <img
@@ -348,7 +358,7 @@ export default function EstimatePage() {
                     </div>
                   )}
                 </div>
-                <div className="equipment-price">
+                <div className="equipment-price" style={replacedBy ? { textDecoration: 'line-through' } : undefined}>
                   {itemDiscount > 0.005 && (
                     <div style={{ fontSize: 12, color: 'var(--text-3)', textDecoration: 'line-through' }}>
                       {fmt(grossTotal)}
@@ -412,27 +422,56 @@ export default function EstimatePage() {
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
 
+  // Upgrade sections: optional sections that REPLACE base lines
+  // (replacesItemIds) are priced at their net change over the lines shown.
+  const upgrades = useMemo(() => {
+    const sections = data?.estimate_sections ?? [];
+    const map = new Map<string, UpgradeInfo<LineItem>>();
+    for (const s of sections) {
+      if (s.isReference) map.set(s.name, upgradeInfo(s, lineItems, sections));
+    }
+    return map;
+  }, [data, lineItems]);
+  // Base line id → the added upgrade that replaces it (first one wins).
+  const replacedByAdded = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const name of Array.from(addedSet)) {
+      for (const li of upgrades.get(name)?.replaced ?? []) {
+        const id = normId(li.id);
+        if (!m.has(id)) m.set(id, name);
+      }
+    }
+    return m;
+  }, [addedSet, upgrades]);
+  const replacedBy = (li: LineItem) => (li.id ? replacedByAdded.get(normId(li.id)) : undefined);
+
   // Items that count toward the customer's total: everything outside reference
-  // sections, plus reference sections they've added.
+  // sections, plus reference sections they've added, minus base lines an added
+  // upgrade replaces.
   const countedItems = useMemo(
     () =>
       lineItems.filter((li) => {
         const sec = li.section_name ?? '';
+        if (li.id && replacedByAdded.has(normId(li.id))) return false;
         return !refSectionNames.has(sec) || addedSet.has(sec);
       }),
-    [lineItems, refSectionNames, addedSet]
+    [lineItems, refSectionNames, addedSet, replacedByAdded]
   );
-  // What the added sections contribute on top of the server-computed base.
+  // What the added sections change on the server-computed base: their lines,
+  // less the base lines they replace (can be negative for a downgrade).
   const addedSums = useMemo(() => {
     let oneTime = 0;
     let monthly = 0;
     for (const li of lineItems) {
-      if (!addedSet.has(li.section_name ?? '')) continue;
-      if (li.is_recurring) monthly += lineAmount(li);
-      else oneTime += lineAmount(li);
+      const sign = addedSet.has(li.section_name ?? '') ? 1
+        : li.id && replacedByAdded.has(normId(li.id)) ? -1
+        : 0;
+      if (!sign) continue;
+      if (li.is_recurring) monthly += sign * lineAmount(li);
+      else oneTime += sign * lineAmount(li);
     }
     return { oneTime, monthly };
-  }, [lineItems, addedSet]);
+  }, [lineItems, addedSet, replacedByAdded]);
 
   type SectionHeaderInfo = {
     name: string;
@@ -449,7 +488,7 @@ export default function EstimatePage() {
     const result: { item: LineItem; header?: SectionHeaderInfo }[] = [];
     const emit = (name: string, isReference: boolean, items: LineItem[]) => {
       if (!items.length) return;
-      const subtotal = items.filter((li) => !li.is_recurring).reduce((s, li) => s + lineAmount(li), 0);
+      const subtotal = items.filter((li) => !li.is_recurring && !replacedBy(li)).reduce((s, li) => s + lineAmount(li), 0);
       const header: SectionHeaderInfo = {
         name,
         isReference,
@@ -470,7 +509,7 @@ export default function EstimatePage() {
       (li) => !li.section_name || !sections.some((s) => s.name === li.section_name)
     ));
     return result;
-  }, [lineItems, data, addableSectionNames, addedSet]);
+  }, [lineItems, data, addableSectionNames, addedSet, replacedByAdded]);
 
   // Reference sections: their own browse-and-add card under the Pricing card.
   const referenceBlocks = useMemo(
@@ -513,7 +552,9 @@ export default function EstimatePage() {
       const lineDiscounts = countedItems
         .filter((li) => li.is_recurring !== true)
         .reduce((s, li) => s + Math.max(0, Math.min(Number(li.discount_amount ?? 0), (li.quantity ?? 0) * (li.unit_price ?? 0))), 0);
-      if (addedSums.oneTime <= 0 && addedSums.monthly <= 0) {
+      // Scope untouched → the server's tier numbers. (Checked on the set, not
+      // the sums: an upgrade can net to zero or below.)
+      if (addedSet.size === 0) {
         return {
           equipment: activeTier.equipment_total,
           labor: activeTier.labor_total,
@@ -672,15 +713,15 @@ export default function EstimatePage() {
     // Percentage deposits scale with the configured total when the customer
     // adds optional sections; fixed-dollar deposits stay as quoted.
     if (isTiered && activeTier) {
-      if (addedSums.oneTime > 0 && Number(activeTier.deposit_percent ?? 0) > 0) {
+      if (addedSet.size > 0 && Number(activeTier.deposit_percent ?? 0) > 0) {
         return totals.total * (Number(activeTier.deposit_percent) / 100);
       }
       return activeTier.deposit_amount;
     }
     const pct = Number(data?.estimate?.deposit_percent ?? 0);
-    if (addedSums.oneTime > 0 && pct > 0) return totals.total * (pct / 100);
+    if (addedSet.size > 0 && pct > 0) return totals.total * (pct / 100);
     return data?.estimate?.deposit_amount ?? null;
-  }, [data, isTiered, activeTier, addedSums, totals]);
+  }, [data, isTiered, activeTier, addedSet, totals]);
 
   // Multi-Pay plans for the currently configured total: server-computed when
   // the scope is untouched, recomputed from the raw config when sections were
@@ -688,7 +729,7 @@ export default function EstimatePage() {
   const effectiveMultiPay = useMemo(() => {
     const serverPlans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
     const cfg = data?.multi_pay_config;
-    if (addedSums.oneTime <= 0 || !cfg?.offered) return serverPlans;
+    if (addedSet.size === 0 || !cfg?.offered) return serverPlans;
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const total = totals.total;
     return (
@@ -708,7 +749,7 @@ export default function EstimatePage() {
           finance_charge: round2(financedTotal - total),
         };
       });
-  }, [data, isTiered, activeTier, addedSums, totals]);
+  }, [data, isTiered, activeTier, addedSet, totals]);
 
   const submit = async (payload: any) => {
     // Preview mode: simulate the interaction without writing anything to the DB.
@@ -1033,7 +1074,7 @@ export default function EstimatePage() {
                   </div>
                 );
               })()}
-              {renderEquipmentRow(item, i)}
+              {renderEquipmentRow(item, i, replacedBy(item))}
               </div>
             );
           })
@@ -1229,6 +1270,11 @@ export default function EstimatePage() {
             const added = addedSet.has(section.name);
             const addable = addableSectionNames.has(section.name);
             const accent = added ? 'var(--green)' : 'var(--amber)';
+            // Upgrade: priced at the net change, naming what it replaces.
+            const upgrade = upgrades.get(section.name);
+            const isUpgrade = !!upgrade && upgrade.replaced.length > 0;
+            const signed = (n: number) => (n < -0.005 ? `−${fmt(-n)}` : `+${fmt(n)}`);
+            const price = isUpgrade ? signed(upgrade!.net) : fmt(subtotal);
             return (
               <div key={section.name} style={{ marginTop: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: 12 }}>
@@ -1239,16 +1285,21 @@ export default function EstimatePage() {
                       <div style={{ fontSize: 11, fontWeight: 600, color: accent, marginTop: 2 }}>
                         {added ? '✓ Added to your total' : 'Priced for reference — not included in total'}
                       </div>
+                      {isUpgrade && (
+                        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 3 }}>
+                          {upgrade!.summary} · {fmt(upgrade!.sectionTotal)} − {fmt(upgrade!.replacedTotal)}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: accent, alignSelf: 'center', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{fmt(subtotal)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: accent, alignSelf: 'center', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{price}</span>
                 </div>
                 {addable && !terminal && (
                   <button
                     onClick={() => toggleSection(section.name)}
                     style={{ marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: added ? 'transparent' : 'rgba(34,197,94,0.15)', border: `1px solid ${added ? 'rgba(139,147,167,0.4)' : 'rgba(34,197,94,0.4)'}`, color: added ? 'var(--text-3)' : 'var(--green)' }}
                   >
-                    {added ? 'Remove from estimate' : `＋ Add to my estimate — ${fmt(subtotal)}`}
+                    {added ? 'Remove from estimate' : `＋ ${isUpgrade ? 'Upgrade' : 'Add to'} my estimate — ${price}`}
                   </button>
                 )}
                 {items.map((item, idx) => renderEquipmentRow(item, idx))}
