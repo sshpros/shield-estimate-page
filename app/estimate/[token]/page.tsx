@@ -265,6 +265,20 @@ export default function EstimatePage() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0);
 
+  // Labor lines never show a unit price — the customer would read it as our
+  // hourly rate (Kyle 2026-11-19). Hourly labor reads "Est. 6 hrs", other
+  // labor (per-camera install) reads "Qty 7". Mirrors the app's PDF
+  // (EstimatePDFContent.laborQuantityText). Billing stays hourly T&M.
+  const laborQuantityText = (item: LineItem): string | null => {
+    const unit = (item.unit_type ?? '').trim().toLowerCase();
+    const hourlyUnit = ['hr', 'hrs', 'hour', 'hours'].includes(unit);
+    const isLabor = (item.category ?? '').trim().toLowerCase() === 'labor' || hourlyUnit;
+    if (!isLabor) return null;
+    const qty = Math.round(Number(item.quantity ?? 0) * 100) / 100;
+    if (hourlyUnit || /\b(hours?|hrs?)\b/i.test(item.name ?? '')) return `Est. ${qty} ${qty === 1 ? 'hr' : 'hrs'}`;
+    return `Qty ${qty}`;
+  };
+
   const renderEquipmentRow = (item: LineItem, i: number, replacedBy?: string) => {
     const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
     const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
@@ -348,12 +362,16 @@ export default function EstimatePage() {
                     </div>
                   )}
                   <div className="equipment-qty" style={{ marginTop: 6 }}>
-                    Qty {item.quantity} × {fmt(item.unit_price)}
-                    {item.is_recurring
-                      ? '/mo'
-                      : item.unit_type && item.unit_type !== 'Each'
-                      ? `/${item.unit_type}`
-                      : ''}
+                    {laborQuantityText(item) ?? (
+                      <>
+                        Qty {item.quantity} × {fmt(item.unit_price)}
+                        {item.is_recurring
+                          ? '/mo'
+                          : item.unit_type && item.unit_type !== 'Each'
+                          ? `/${item.unit_type}`
+                          : ''}
+                      </>
+                    )}
                   </div>
                   {item.is_recurring && (
                     <div
@@ -692,28 +710,27 @@ export default function EstimatePage() {
     return { equipment, labor, laborHours: laborIsFlat ? null : (laborHoursVal || null), laborRate: laborIsFlat ? null : (laborRateVal || null), laborRegularRate: laborIsFlat ? null : (Number(data.labor?.regular_rate ?? 0) > laborRateVal + 0.005 ? Number(data.labor?.regular_rate) : null), laborTechs, laborIsFlat, dispatch, dispatchGross, dispatchDiscount, dispatchItemized, subtotal, discount, discountReason, tax, total, monthly, monthlyOriginal, lineDiscounts };
   }, [data, lineItems, isTiered, activeTier, countedItems, addedSums, addedSet]);
 
-  // How the labor number was built, in the customer's words. Mirrors the PDF
-  // ("Labor (8.0 hrs x 2 techs)" / "Labor (flat rate, 2 techs)").
+  // How the labor number was built, in the customer's words: crew and hours
+  // on site, never the hourly rate (Kyle 2026-11-19; billing is still hourly
+  // T&M). Mirrors the PDF ("2 technicians, est. 9 hours on site (time &
+  // materials)" / "Flat rate · crew of 2").
   const laborBreakdown = useMemo(() => {
     const techs = Math.max(1, Number(totals.laborTechs ?? 1));
     const crew = techs > 1 ? `${techs} technicians` : '1 technician';
     if (totals.laborIsFlat) return techs > 1 ? `Flat rate · crew of ${techs}` : 'Flat rate';
-    const hrs = Number(totals.laborHours ?? 0);
-    const rate = Number(totals.laborRate ?? 0);
-    const rateStr = Number.isInteger(rate) ? `$${rate}` : fmt(rate);
-    if (hrs > 0 && rate > 0) return `${hrs} hrs × ${crew} × ${rateStr}/hr`;
-    if (hrs > 0) return `${hrs} hrs × ${crew}`;
+    const hrs = Math.round(Number(totals.laborHours ?? 0) * 100) / 100;
+    if (hrs > 0) return `${crew}, est. ${hrs} ${hrs === 1 ? 'hour' : 'hours'} on site (time & materials)`;
     return techs > 1 ? `Crew of ${techs}` : '';
   }, [totals]);
-  /** "$150/hr → $135/hr" when the hourly rate is discounted, else null. */
-  const laborRateDiscount = useMemo(() => {
+  /** Dollars saved by an hourly labor discount, else null. The rates stay internal. */
+  const laborDiscountSaved = useMemo(() => {
     const reg = Number(totals.laborRegularRate ?? 0);
     const rate = Number(totals.laborRate ?? 0);
     if (totals.laborIsFlat || !(reg > rate + 0.005) || rate <= 0) return null;
-    const money = (n: number) => (Number.isInteger(n) ? `$${n}` : fmt(n));
     const hrs = Number(totals.laborHours ?? 0);
     const techs = Math.max(1, Number(totals.laborTechs ?? 1));
-    return { regular: money(reg), charged: money(rate), saved: Math.round((reg - rate) * hrs * techs * 100) / 100 };
+    const saved = Math.round((reg - rate) * hrs * techs * 100) / 100;
+    return saved > 0.005 ? saved : null;
   }, [totals]);
   const laborShortLabel = useMemo(() => {
     const techs = Math.max(1, Number(totals.laborTechs ?? 1));
@@ -1127,14 +1144,14 @@ export default function EstimatePage() {
                 </svg>
               </div>
               <div className="service-details">
-                <div className="service-name">Professional installation</div>
+                <div className="service-name">Professional Installation</div>
                 <div className="service-meta">{laborBreakdown}</div>
-                {laborRateDiscount && (
-                  // Hourly discount (Kyle 2026-10-24): regular rate struck through.
+                {laborDiscountSaved && (
+                  // Hourly discount (Kyle 2026-10-24) shown as dollars saved;
+                  // the rates themselves stay off the page (2026-11-19).
                   <div className="service-meta">
-                    <s style={{ opacity: 0.6 }}>{laborRateDiscount.regular}/hr</s>{' '}
-                    <strong style={{ color: 'var(--green)' }}>{laborRateDiscount.charged}/hr</strong>
-                    {' · you save '}{fmt(laborRateDiscount.saved)}
+                    <strong style={{ color: 'var(--green)' }}>Labor discount</strong>
+                    {' · you save '}{fmt(laborDiscountSaved)}
                   </div>
                 )}
                 {!totals.dispatchItemized && totals.dispatch > 0 && (
@@ -1176,7 +1193,8 @@ export default function EstimatePage() {
         <div className="card-title">Time &amp; Materials</div>
         <div className="notes-text">
           Labor hours, cable and other time-and-materials (T&amp;M) items are estimates. They are billed for the
-          actual time and materials used, so T&amp;M charges are subject to change.
+          actual time and materials used, so T&amp;M charges are subject to change. Labor is billed at our
+          standard hourly rate for the actual time on site.
         </div>
       </div>
 
