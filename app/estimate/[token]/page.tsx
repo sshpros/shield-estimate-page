@@ -6,6 +6,19 @@ import type SignatureCanvasType from 'react-signature-canvas';
 import { LineIcon } from '../lineIcon';
 import { normId, upgradeInfo, type UpgradeInfo } from '../upgrades';
 
+// A Multi-Pay plan as get-estimate prices it. Deposit + balance plans
+// (after_deposit) keep the normal deposit due today and split only the
+// remaining balance; the financing % applies to the balance.
+type MultiPayPlan = {
+  months: number;
+  monthly_amount: number;
+  finance_pct?: number;
+  finance_charge?: number;
+  after_deposit?: boolean;
+  deposit_amount?: number;
+  financed_balance?: number;
+};
+
 type LineItem = {
   /** Line id — upgrade sections name the base lines they replace by id. */
   id?: string | null;
@@ -60,7 +73,7 @@ type Tier = {
   deposit_amount: number;
   monthly_total?: number;
   monthly_original?: number;
-  multi_pay?: { months: number; monthly_amount: number; finance_pct?: number; finance_charge?: number }[];
+  multi_pay?: MultiPayPlan[];
 };
 
 type EstimateLink = {
@@ -140,11 +153,12 @@ type EstimateResponse = {
   dispatch_discount?: number | null;
   dispatch_itemized?: boolean | null;
   multi_pay_offered?: boolean;
-  multi_pay?: { months: number; monthly_amount: number; finance_pct?: number; finance_charge?: number }[];
+  multi_pay?: MultiPayPlan[];
   multi_pay_config?: {
     offered: boolean;
     mins: { m3: number; m6: number; m12: number };
     pcts: { p3: number; p6: number; p12: number };
+    after_deposit?: boolean;
   };
 };
 
@@ -726,12 +740,17 @@ export default function EstimatePage() {
   // Multi-Pay plans for the currently configured total: server-computed when
   // the scope is untouched, recomputed from the raw config when sections were
   // added (eligibility can change as the total grows).
-  const effectiveMultiPay = useMemo(() => {
+  const effectiveMultiPay = useMemo((): MultiPayPlan[] => {
     const serverPlans = (isTiered ? activeTier?.multi_pay : data?.multi_pay) ?? [];
     const cfg = data?.multi_pay_config;
     if (addedSet.size === 0 || !cfg?.offered) return serverPlans;
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const total = totals.total;
+    // Deposit + balance: same math as the server's quoteAfterDeposit — the
+    // deposit stays due today, only (total − deposit) is financed.
+    const dep = round2(Math.min(Math.max(0,
+      Number(depositAmount ?? 0) > 0 ? Number(depositAmount) : Number(data?.estimate?.deposit_amount ?? 0)), round2(total)));
+    const afterDeposit = cfg.after_deposit === true && dep > 0.005 && round2(total) - dep > 0.005;
     return (
       [
         [3, cfg.mins.m3, cfg.pcts.p3],
@@ -740,7 +759,21 @@ export default function EstimatePage() {
       ] as [number, number, number][]
     )
       .filter(([, min]) => total >= min)
-      .map(([months, , pct]) => {
+      .map(([months, , pct]): MultiPayPlan => {
+        if (afterDeposit) {
+          const balance = round2(round2(total) - dep);
+          const charge = round2(balance * (pct / 100));
+          const financed = round2(balance + charge);
+          return {
+            months,
+            monthly_amount: round2(financed / months),
+            finance_pct: pct,
+            finance_charge: charge,
+            after_deposit: true,
+            deposit_amount: dep,
+            financed_balance: balance,
+          };
+        }
         const financedTotal = round2(total * (1 + pct / 100));
         return {
           months,
@@ -749,7 +782,9 @@ export default function EstimatePage() {
           finance_charge: round2(financedTotal - total),
         };
       });
-  }, [data, isTiered, activeTier, addedSet, totals]);
+  }, [data, isTiered, activeTier, addedSet, totals, depositAmount]);
+  // Deposit + balance plans keep the normal deposit due today.
+  const mpAfterDeposit = effectiveMultiPay.some((p) => p.after_deposit === true);
 
   const submit = async (payload: any) => {
     // Preview mode: simulate the interaction without writing anything to the DB.
@@ -1227,6 +1262,7 @@ export default function EstimatePage() {
           if (!plans.length || mode === 'accept') return null;
           const allZero = plans.every((p) => Number(p.finance_pct ?? 0) <= 0.005);
           const cheapest = plans[plans.length - 1];
+          const afterDep = cheapest?.after_deposit === true;
           return (
             <div style={{
               marginTop: 10, padding: '10px 12px', borderRadius: 10,
@@ -1236,7 +1272,9 @@ export default function EstimatePage() {
                 💳 MULTI-PAY AVAILABLE{allZero ? ' — 0% FINANCING' : ''}
               </span>
               <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3 }}>
-                Split into {plans.map((p) => p.months).join(', ')} monthly payments
+                {afterDep
+                  ? `Pay your ${fmt(cheapest.deposit_amount ?? 0)} deposit, then split the balance into ${plans.map((p) => p.months).join(', ')} monthly payments`
+                  : `Split into ${plans.map((p) => p.months).join(', ')} monthly payments`}
                 {cheapest ? ` — from ${fmt(cheapest.monthly_amount)}/mo` : ''}.
                 {allZero ? ' No interest or fees.' : ' Financing charges shown per plan.'} Choose a plan when you accept.
               </div>
@@ -1248,7 +1286,8 @@ export default function EstimatePage() {
             {(() => {
               // With Multi-Pay on the table the amount due at approval depends
               // on the plan the customer picks — don't promise a number.
-              const mpOffered = effectiveMultiPay.length > 0;
+              // Deposit + balance keeps one deposit for every option.
+              const mpOffered = effectiveMultiPay.length > 0 && !mpAfterDeposit;
               if (estimate.deposit_paid) {
                 return mpOffered ? '✓ First payment received' : `✓ Deposit of ${fmt(depositAmount)} received`;
               }
@@ -1408,7 +1447,9 @@ export default function EstimatePage() {
                       style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
                       onClick={() => setMultiPayMonths(p.months)}
                     >
-                      Multi-Pay — {p.months} monthly payments of {fmt(p.monthly_amount)}
+                      {p.after_deposit
+                        ? `Multi-Pay — ${fmt(p.deposit_amount ?? 0)} deposit today, then ${p.months} monthly payments of ${fmt(p.monthly_amount)}`
+                        : `Multi-Pay — ${p.months} monthly payments of ${fmt(p.monthly_amount)}`}
                       {zeroPct && (
                         <span style={{
                           display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 999,
@@ -1419,7 +1460,11 @@ export default function EstimatePage() {
                         </span>
                       )}
                       <span style={{ display: 'block', fontSize: 11, opacity: 0.7, marginTop: 2 }}>
-                        {zeroPct
+                        {p.after_deposit
+                          ? (zeroPct
+                              ? `Deposit today; the ${fmt(p.financed_balance ?? 0)} balance auto-charges monthly starting next month. Zero interest, zero fees.`
+                              : `Deposit today; the ${fmt(p.financed_balance ?? 0)} balance auto-charges monthly starting next month. Includes a ${pct}% financing charge on the balance (${fmt(p.finance_charge ?? 0)}).`)
+                          : zeroPct
                           ? 'First payment today, then auto-charged monthly. Zero interest, zero fees — same price, just split up.'
                           : `First payment today, then auto-charged monthly. Includes a ${pct}% financing charge (${fmt(p.finance_charge ?? 0)}).`}
                       </span>
@@ -1463,6 +1508,8 @@ export default function EstimatePage() {
           >
             {submitting
               ? 'Submitting…'
+              : multiPayMonths > 0 && mpAfterDeposit
+              ? 'Accept & Continue to Deposit'
               : multiPayMonths > 0
               ? 'Accept & Pay First Installment'
               : estimate.deposit_required
