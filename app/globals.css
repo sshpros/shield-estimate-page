@@ -27,34 +27,58 @@
   --red: #f07070;              /* declined, removals */
   --band: #12325a;             /* proposal navy bands */
   --nav-bg: rgba(18,18,23,.92);
+  /* Matches the estimate email (Kyle 2026-11-19): silver header + shield-blue rule,
+     equipment = shield blue, labor = steel, recommended = green, navy totals. */
+  --hero-bg: linear-gradient(180deg, #26262f, #1c1c24);
+  --hero-rule: #2a5be8;
+  --equip: #6b9cff;            /* shield blue, lifted for dark */
+  --equip-tint: rgba(42,91,232,.16);
+  --steel: #a6abb3;
+  --steel-tint: rgba(166,171,179,.14);
+  --recommend: #3fd39a;
+  --recommend-tint: rgba(63,211,154,.14);
+  --totals-bg: #16243e;
+  --totals-text: #ffffff;
+  --totals-sub: #c7ceda;
   --logo-glow: 0 0 0 transparent;
 }
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --bg: #ffffff;
-    --card: #f2f2f7;
-    --surface-2: #e5e5ea;
+    --bg: #eef1f5;
+    --card: #ffffff;
+    --surface-2: #f4f6f9;
     --input-bg: rgba(118,118,128,.12);
-    --border: rgba(0,0,0,.1);
+    --border: #d9dee6;
     --border-soft: rgba(0,0,0,.07);
     --border-strong: rgba(0,0,0,.18);
-    --text: #1a294d;           /* wordmark navy */
+    --text: #16243e;           /* email ink navy */
     --text-2: #2f3646;
-    --text-3: #666b73;         /* silver (light) */
+    --text-3: #5b6678;         /* steel (email) */
     --text-dim: #8a8f98;
-    --accent: #1a59c4;
-    --accent-hover: #164da8;
+    --accent: #1244d3;         /* shield blue (email) */
+    --accent-hover: #1039bb;
     --on-accent: #ffffff;
-    --link: #2e7af2;
-    --blue: #1a59c4;
+    --link: #1244d3;
+    --blue: #1244d3;
     --violet: #6d3fc7;
-    --green: #1f8f5f;
+    --green: #15803d;
     --amber: #b06e00;
     --orange: #c2600f;
     --red: #c43c3c;
-    --band: #1a59c4;
+    --band: #1244d3;
     --nav-bg: rgba(255,255,255,.92);
+    --hero-bg: linear-gradient(180deg, #f7f8fa, #dfe3e9);
+    --hero-rule: #1244d3;
+    --equip: #1244d3;
+    --equip-tint: #eef3ff;
+    --steel: #5b6678;
+    --steel-tint: #e9ecf1;
+    --recommend: #15803d;
+    --recommend-tint: #f0fdf4;
+    --totals-bg: #16243e;
+    --totals-text: #ffffff;
+    --totals-sub: #c7ceda;
   }
 }
 
@@ -423,3 +447,39 @@ input.gc-late{border-color:var(--amber);}
 .gc-g-legend i{position:relative;display:inline-block;width:18px;height:10px!important;top:0!important;margin:0;}
 .gc-g-legend .gc-g-insp{width:9px;height:9px!important;}
 .gc-g-legend .gc-g-dry,.gc-g-legend .gc-g-today{width:3px;height:12px!important;}
+
+/* ---- Email-matched look (Kyle 2026-11-19: page and email should feel like one product) */
+.logo-wrap { background: var(--hero-bg); border-radius: 16px 16px 0 0; margin-top: 8px; }
+.logo-wrap + .header { background: var(--hero-bg); border-bottom: 3px solid var(--hero-rule); border-radius: 0 0 16px 16px; padding: 0 16px 18px; margin-bottom: 20px; }
+.btn-primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent)); box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+/* Tier picker: active = shield blue, recommended = green badge/edge (same as the email). */
+.tier-btn-active { background: var(--equip-tint); border-color: var(--accent) !important; }
+.tier-btn-recommended { border-color: var(--recommend); border-left-width: 4px; }
+.tier-btn-recommended:not(.tier-btn-active) { background: var(--recommend-tint); }
+.tier-badge { color: #fff; background: var(--recommend); }
+.tier-btn-active .tier-total { color: var(--equip); }
+
+/* Line-item tags, as in the email. */
+.item-tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; border-radius: 4px; padding: 1px 6px; margin-right: 6px; vertical-align: 2px; }
+.item-tag-equipment { color: var(--equip); background: var(--equip-tint); }
+.item-tag-labor { color: var(--steel); background: var(--steel-tint); }
+.item-tag-monthly { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+
+/* Equipment = shield blue, labor & dispatch = steel. */
+.totals-row.item.equipment > span { color: var(--equip); }
+.totals-row.item.labor > span,
+.totals-row.item.dispatch > span { color: var(--steel); }
+.service-icon, .line-icon-install, .line-icon-dispatch, .line-icon-program, .line-icon-drywall { color: var(--steel); background: var(--steel-tint); border-color: color-mix(in srgb, var(--steel) 30%, transparent); }
+
+/* Navy totals block: subtotal / tax / total, like the email. */
+.totals-row.subtotal, .totals-row.discount, .totals-row.tax, .totals-row.grand { background: var(--totals-bg); padding-left: 14px; padding-right: 14px; }
+.totals-row.subtotal { margin-top: 12px; border-radius: 10px 10px 0 0; color: var(--totals-sub); }
+.totals-row.subtotal > span:last-child { color: var(--totals-text); }
+.totals-row.tax > span { color: var(--totals-sub); }
+.totals-row.tax > span:last-child { color: var(--totals-text); }
+.totals-row.discount, .totals-row.discount > span:last-child { color: #86efac; }
+.totals-row.grand { border-top: 1px solid #3a4a68; margin-top: 0; border-radius: 0 0 10px 10px; padding-bottom: 14px; color: var(--totals-text); }
+.totals-row.grand > span:last-child { color: var(--totals-text); }
+.totals-row.item + .totals-row.grand { border-radius: 10px; margin-top: 12px; border-top: none; }
+.tier-badge.tier-badge-premium { color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, transparent); }
