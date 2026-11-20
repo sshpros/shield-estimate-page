@@ -279,6 +279,14 @@ export default function EstimatePage() {
     return `Qty ${qty}`;
   };
 
+  /** Same tag the estimate email shows: EQUIPMENT / LABOR / MONTHLY. */
+  const itemKind = (item: LineItem): 'equipment' | 'labor' | 'monthly' => {
+    if (item.is_recurring) return 'monthly';
+    if (laborQuantityText(item) !== null) return 'labor';
+    if (/\b(labor|installation|install labor|dispatch|programming|clean ?up)\b/i.test(item.name ?? '') && !item.part_number) return 'labor';
+    return 'equipment';
+  };
+
   const renderEquipmentRow = (item: LineItem, i: number, replacedBy?: string) => {
     const grossTotal = (item.quantity ?? 0) * (item.unit_price ?? 0);
     const itemDiscount = Math.max(0, Math.min(Number(item.discount_amount ?? 0), grossTotal));
@@ -306,7 +314,10 @@ export default function EstimatePage() {
                   <LineIcon item={item} />
                 )}
                 <div className="equipment-details">
-                  <div className="equipment-name">{item.name}</div>
+                  <div className="equipment-name">
+                    <span className={`item-tag item-tag-${itemKind(item)}`}>{itemKind(item).toUpperCase()}</span>
+                    {item.name}
+                  </div>
                   {(item.manufacturer || item.model_number) && (
                     <div className="equipment-meta">
                       {[item.manufacturer, item.model_number].filter(Boolean).join(' · ')}
