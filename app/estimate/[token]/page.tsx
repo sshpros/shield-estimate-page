@@ -162,6 +162,33 @@ type EstimateResponse = {
   };
 };
 
+/** Supabase public-storage images through the resize endpoint: item photos were
+ *  full-size PNGs (up to ~1 MB each) shown as thumbnails (Kyle 2026-11-20). The
+ *  browser gets WebP when it supports it. Non-Supabase URLs pass through. */
+function sizedImage(url: string, width: number): string {
+  const marker = '/storage/v1/object/public/';
+  if (!url || !url.includes(marker)) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return url.replace(marker, '/storage/v1/render/image/public/') + `${sep}width=${width}&resize=contain&quality=75`;
+}
+
+/** Thumbnail that falls back to the original if the resize endpoint fails. */
+function ItemImage({ src, alt, onOpen }: { src: string; alt: string; onOpen: () => void }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <img
+      src={failed ? src : sizedImage(src, 200)}
+      alt={alt}
+      className="equipment-img"
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      onClick={onOpen}
+      style={{ cursor: 'zoom-in' }}
+    />
+  );
+}
+
 const DEFAULT_LOGO_URL =
   'https://fzzpdojbuwgmylmadupm.supabase.co/storage/v1/object/public/public-assets/brand/shield-lockup-v2.png';
 const PAYMENT_PAGE_URL =
@@ -303,12 +330,10 @@ export default function EstimatePage() {
               )}
               <div className="equipment-item">
                 {item.primary_image_url ? (
-                  <img
+                  <ItemImage
                     src={item.primary_image_url}
                     alt={item.name}
-                    className="equipment-img"
-                    onClick={() => setLightboxImage(item.primary_image_url!)}
-                    style={{ cursor: 'zoom-in' }}
+                    onOpen={() => setLightboxImage(item.primary_image_url!)}
                   />
                 ) : (
                   <LineIcon item={item} />
@@ -364,9 +389,11 @@ export default function EstimatePage() {
                       {gallery.slice(0, 6).map((url, idx) => (
                         <img
                           key={idx}
-                          src={url}
+                          src={sizedImage(url, 160)}
                           alt={`${item.name} ${idx + 1}`}
                           className="gallery-thumb"
+                          loading="lazy"
+                          decoding="async"
                           onClick={() => setLightboxImage(url)}
                         />
                       ))}
@@ -872,6 +899,14 @@ export default function EstimatePage() {
     }
   };
 
+  /** Top-of-page shortcut: open the same panel as the bottom buttons and bring it into view. */
+  const respond = (next: 'accept' | 'request') => {
+    setMode(next);
+    requestAnimationFrame(() =>
+      document.getElementById('respond')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
+
   const handleAccept = () => {
     const pad = sigRef.current;
     if (!pad || pad.isEmpty()) {
@@ -963,15 +998,8 @@ export default function EstimatePage() {
           </div>
         </div>
       )}
-      <div
-        className="logo-wrap"
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '20px 0',
-        }}
-      >
+      <div className="hero">
+      <div className="logo-wrap">
         {!logoFailed ? (
           <img
             src={logoSrc}
@@ -998,7 +1026,7 @@ export default function EstimatePage() {
           </div>
         )}
       </div>
-
+      <div className="hero-rule-line" aria-hidden="true" />
       <div className="header">
         <h1>Your Estimate</h1>
         <p>
@@ -1006,6 +1034,33 @@ export default function EstimatePage() {
           <span className={statusClass}>{estimate.status}</span>
         </p>
       </div>
+      </div>
+
+      {!terminal && mode === 'view' && (
+        <div className="card quick-respond">
+          <div className="card-title">Already reviewed it?</div>
+          <p>
+            If you&apos;ve gone through this estimate in your email or the PDF, you can respond right here.
+            {isTiered ? ` Accepting here selects the ${activeTier?.label ?? ''} package — you can compare packages below first.` : ''}
+            {' '}Nothing is final until you sign.
+          </p>
+          <div className="glow-wrap">
+            <button className="btn btn-primary" onClick={() => respond('accept')}>
+              {isTiered ? `Accept ${activeTier?.label ?? ''} Package` : 'Accept Estimate'}
+            </button>
+          </div>
+          <div className="btn-row">
+            <button className="btn btn-secondary" onClick={() => respond('request')}>
+              Request Changes
+            </button>
+          </div>
+          <a className="details-link" href="#estimate-details">
+            Review the full details first ↓
+          </a>
+        </div>
+      )}
+
+      <div id="estimate-details" />
 
       <div className="card">
         <div className="card-title">Customer</div>
@@ -1435,6 +1490,7 @@ export default function EstimatePage() {
         </div>
       )}
 
+      <div id="respond" />
       {mode === 'accept' && (
         <div className="card">
           <div className="card-title">
@@ -1634,8 +1690,11 @@ export default function EstimatePage() {
           }}
         >
           <img
-            src={lightboxImage}
+            src={sizedImage(lightboxImage, 1400)}
             alt="Equipment"
+            onError={(e) => {
+              if (e.currentTarget.src !== lightboxImage) e.currentTarget.src = lightboxImage;
+            }}
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
           />
         </div>
